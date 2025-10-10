@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>rcv_log live viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #111; color: #fff; }
+    /* #top { padding: 10px; background:#222; color: #fff; } */
+    #top {
+      padding: 10px;
+      background:#222;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-icon {
+      font-size: 18px;
+      margin-right: 10px;
+    }
+
+    #tableWrap { height: calc(100vh - 50px); overflow: auto; background: #111; }
+    table { width: 100%; border-collapse: collapse; color: #fff; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid #333; font-size: 13px; text-align: left; }
+    th { position: sticky; top: 0; background: #222; z-index: 2; }
+
+    th:nth-child(1), td:nth-child(1) { width: 15px; }
+    th:nth-child(2), td:nth-child(2) { width: 80px; }
+    th:nth-child(3), td:nth-child(3) { width: 140px; }
+    th:nth-child(4), td:nth-child(4) { width: 200px; }
+    th:nth-child(5), td:nth-child(5) { width: 120px; }
+    th:nth-child(6), td:nth-child(6) { width: auto; }
+
+    th:nth-child(1), th:nth-child(3), th:nth-child(6) { color: transparent; }
+
+    .sev-0 { color: #ffffff; }
+    .sev-1 { color: #ff5555; }
+    .sev-2 { color: #ff9900; }
+    .sev-3 { color: #ffff55; }
+    .sev-4 { color: #ff55ff; }
+    .sev-5 { color: #55ffff; }
+    .sev-6 { color: #55ff55; }
+
+    tr.updated { outline: 3px solid rgba(255, 255, 255, 0.25); transition: outline 0.7s ease; }
+
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align: middle; }
+    .dot.hidden { visibility:hidden; }
+  </style>
+</head>
+<body>
+<div id="top">
+  <strong>SynAck</strong>
+  <span id="statusIcon" class="status-icon">❌</span>
+</div>
+
+<div id="tableWrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Active</th><th>Severity</th><th>Traptime</th><th>Hostname</th><th>Agent IP</th><th>Formatline</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+(() => {
+  const wsUrl = (location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws';
+  const PAGE_SIZE = 50;
+  const tbody = document.getElementById('tbody');
+  const statusSpan = document.getElementById('status');
+
+  const severityMap = {0:'INFO',1:'CRITICAL',2:'SEVERE',3:'MAJOR',4:'MINOR',5:'WARNING',6:'NORMAL'};
+  const severityColors = {0:'#ffffff',1:'#ff5555',2:'#ff9900',3:'#ffff55',4:'#ff55ff',5:'#55ffff',6:'#55ff55'};
+
+  const rowMap = new Map();
+  let socket, loadedOffset=0;
+  let updateBuffer=[], processing=false;
+  let requesting=false;
+  let maxId=0;
+
+  function connect() {
+    socket = new WebSocket(wsUrl);
+    const statusIcon = document.getElementById('statusIcon');
+    socket.addEventListener('open', ()=>{
+      statusIcon.textContent = '✅';
+      statusIcon.style.color = '#55ff55';
+    });
+    socket.addEventListener('message', ev=>{
+      try{
+        const msg = JSON.parse(ev.data);
+        if(msg.type==='init'){ renderInitial(msg.rows); loadedOffset=msg.rows.length; }
+        else if(msg.type==='page'){ appendRows(msg.rows); loadedOffset+=msg.rows.length; requesting=false; }
+        else if(msg.type==='update'){ queueUpdates(msg.rows); }
+      }catch(e){ console.error('WS parse error',e); }
+    });
+    socket.addEventListener('close', ()=>{
+      statusIcon.textContent = '❌';
+      statusIcon.style.color = '#ff5555';
+      setTimeout(connect,2000);
+    });
+    socket.addEventListener('error', err=>console.error('WS error', err));
+  }
+
+  function createRow(r) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    tr.className = 'sev-'+(r.severity??0);
+
+    const tdActive = document.createElement('td');
+    const dot = document.createElement('span');
+    dot.className='dot'+(r.active==1?'':' hidden');
+    dot.style.backgroundColor = severityColors[r.severity] || '#fff';
+    tdActive.appendChild(dot);
+    tr.appendChild(tdActive);
+
+    const tdSeverity=document.createElement('td'); tdSeverity.textContent=severityMap[r.severity]||'info'; tr.appendChild(tdSeverity);
+    const tdTrap=document.createElement('td'); tdTrap.textContent=r.traptime||''; tr.appendChild(tdTrap);
+    const tdHost=document.createElement('td'); tdHost.textContent=r.hostname||''; tr.appendChild(tdHost);
+    const tdIp=document.createElement('td'); tdIp.textContent=r.agentip||''; tr.appendChild(tdIp);
+    const tdFormat=document.createElement('td'); tdFormat.textContent=r.formatline||''; tr.appendChild(tdFormat);
+
+    tr.style.color = severityColors[r.severity] || '#fff';
+    return tr;
+  }
+
+  function renderInitial(rows) {
+    tbody.innerHTML='';
+    rowMap.clear();
+    rows.sort((a,b)=>b.id-a.id);
+    rows.forEach(r=>{
+      const tr=createRow(r);
+      tbody.appendChild(tr);
+      rowMap.set(String(r.id), tr);
+      if(r.id>maxId) maxId=r.id;
+    });
+  }
+
+  function appendRows(rows){
+    rows.sort((a,b)=>b.id-a.id);
+    rows.forEach(r=>{
+      const idStr=String(r.id);
+      if(rowMap.has(idStr)) return;
+      const tr=createRow(r);
+      tbody.appendChild(tr);
+      rowMap.set(idStr, tr);
+      if(r.id>maxId) maxId=r.id;
+    });
+  }
+
+  function queueUpdates(rows){
+    updateBuffer.push(...rows);
+    if(!processing){ processing=true; requestAnimationFrame(processBuffer); }
+  }
+
+  function processBuffer(){
+    const items=updateBuffer.splice(0,updateBuffer.length);
+    let added=0, updated=0;
+    items.forEach(r=>{
+      const idStr=String(r.id);
+      const existing=rowMap.get(idStr);
+      if(existing){
+        updated++;
+        const td=existing.children;
+        td[0].querySelector('.dot').className='dot'+(r.active==1?'':' hidden');
+        td[0].querySelector('.dot').style.backgroundColor = severityColors[r.severity] || '#fff';
+        td[1].textContent=severityMap[r.severity]||'info';
+        td[2].textContent=r.traptime||'';
+        td[3].textContent=r.hostname||'';
+        td[4].textContent=r.agentip||'';
+        td[5].textContent=r.formatline||'';
+        existing.classList.add('updated');
+        existing.style.color = severityColors[r.severity] || '#fff';
+        setTimeout(()=>existing.classList.remove('updated'),700);
+      } else {
+        if(r.id>maxId){
+          added++;
+          const tr=createRow(r);
+          tr.classList.add('updated');
+          tbody.insertBefore(tr, tbody.firstChild);
+          rowMap.set(idStr,tr);
+          maxId=r.id;
+          setTimeout(()=>tr.classList.remove('updated'),700);
+        }
+      }
+    });
+    if(added>0 || updated>0) {
+      console.log(`[DEBUG Client] nuove=${added}, aggiornate=${updated}, totali=${added+updated}`);
+    }
+    processing=false;
+    if(updateBuffer.length>0) requestAnimationFrame(processBuffer);
+  }
+
+  const tableWrap=document.getElementById('tableWrap');
+  tableWrap.addEventListener('scroll',()=>{
+    if(!socket || socket.readyState!==WebSocket.OPEN) return;
+    const threshold=300;
+    if(tableWrap.scrollTop + tableWrap.clientHeight + threshold >= tableWrap.scrollHeight){
+      if(!requesting){
+        requesting=true;
+        socket.send(JSON.stringify({type:'getPage',offset:loadedOffset,pageSize:PAGE_SIZE}));
+      }
+    }
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>rcv_log live viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f6f6f6; color: #111; }
+    #top { padding: 10px; background:#222; color: #fff; }
+    #tableWrap { height: calc(100vh - 50px); overflow: auto; background: white; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid #e0e0e0; font-size: 13px; text-align: left; }
+    th { position: sticky; top: 0; background: #fafafa; z-index: 2; }
+
+    /* Active dot */
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:black; }
+    .dot.hidden { visibility:hidden; }
+
+    /* Severity colors */
+    .sev-0 { background: #ffffff; color: #111; }
+    .sev-1 { background: #d32f2f; color: #fff; }
+    .sev-2 { background: #ef6c00; color: #111; }
+    .sev-3 { background: #fff176; color: #111; }
+    .sev-4 { background: #ba68c8; color: #fff; }
+    .sev-5 { background: #4fc3f7; color: #111; }
+    .sev-6 { background: #81c784; color: #111; }
+
+    /* Highlight aggiornamento */
+    tr.updated { outline: 3px solid rgba(255, 235, 59, 0.25); transition: outline 0.7s ease; }
+  </style>
+</head>
+<body>
+<div id="top">
+  <strong>rcv_log live viewer</strong>
+  <span id="status" style="margin-left:20px;">connesso: no</span>
+</div>
+
+<div id="tableWrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Active</th><th>Severity</th><th>Traptime</th><th>Hostname</th><th>Agent IP</th><th>Formatline</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+(() => {
+  const wsUrl = (location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws';
+  const PAGE_SIZE = 50;
+  const tbody = document.getElementById('tbody');
+  const statusSpan = document.getElementById('status');
+
+  const severityMap = {0:'info',1:'critical',2:'severe',3:'major',4:'minor',5:'warning',6:'normal'};
+  const rowMap = new Map();
+  let socket, loadedOffset=0;
+  let updateBuffer=[], processing=false;
+  let requesting=false;
+  let maxId=0;
+
+  // --- WS connection ---
+  function connect() {
+    socket = new WebSocket(wsUrl);
+    socket.addEventListener('open', ()=>statusSpan.textContent='connesso: sì');
+    socket.addEventListener('message', ev=>{
+      try{
+        const msg = JSON.parse(ev.data);
+        if(msg.type==='init'){ renderInitial(msg.rows); loadedOffset=msg.rows.length; }
+        else if(msg.type==='page'){ appendRows(msg.rows); loadedOffset+=msg.rows.length; requesting=false; }
+        else if(msg.type==='update'){ queueUpdates(msg.rows); }
+      }catch(e){ console.error('WS parse error',e); }
+    });
+    socket.addEventListener('close', ()=>{ statusSpan.textContent='connesso: no'; setTimeout(connect,2000); });
+    socket.addEventListener('error', err=>console.error('WS error', err));
+  }
+
+  // --- Row creation ---
+  function createRow(r) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    tr.className = 'sev-'+(r.severity??0);
+
+    const tdActive = document.createElement('td');
+    const dot = document.createElement('span');
+    dot.className='dot'+(r.active==1?'':' hidden');
+    tdActive.appendChild(dot);
+    tr.appendChild(tdActive);
+
+    const tdSeverity=document.createElement('td'); tdSeverity.textContent=severityMap[r.severity]||'info'; tr.appendChild(tdSeverity);
+    const tdTrap=document.createElement('td'); tdTrap.textContent=r.traptime||''; tr.appendChild(tdTrap);
+    const tdHost=document.createElement('td'); tdHost.textContent=r.hostname||''; tr.appendChild(tdHost);
+    const tdIp=document.createElement('td'); tdIp.textContent=r.agentip||''; tr.appendChild(tdIp);
+    const tdFormat=document.createElement('td'); tdFormat.textContent=r.formatline||''; tr.appendChild(tdFormat);
+
+    return tr;
+  }
+
+  function renderInitial(rows) {
+    tbody.innerHTML='';
+    rowMap.clear();
+    rows.sort((a,b)=>b.id-a.id);
+    rows.forEach(r=>{
+      const tr=createRow(r);
+      tbody.appendChild(tr);
+      rowMap.set(String(r.id), tr);
+      if(r.id>maxId) maxId=r.id;
+    });
+  }
+
+  function appendRows(rows){
+    rows.sort((a,b)=>b.id-a.id);
+    rows.forEach(r=>{
+      if(rowMap.has(String(r.id))) return;
+      const tr=createRow(r);
+      tbody.appendChild(tr);
+      rowMap.set(String(r.id), tr);
+      if(r.id>maxId) maxId=r.id;
+    });
+  }
+
+  // --- Aggiornamenti live ---
+  function queueUpdates(rows){
+    updateBuffer.push(...rows);
+    if(!processing){ processing=true; requestAnimationFrame(processBuffer); }
+  }
+
+  function processBuffer(){
+    const items=updateBuffer.splice(0,updateBuffer.length);
+    items.forEach(r=>{
+      const idStr=String(r.id);
+      const existing=rowMap.get(idStr);
+      if(existing){
+        const td=existing.children;
+        td[0].querySelector('.dot').className='dot'+(r.active==1?'':' hidden');
+        td[1].textContent=severityMap[r.severity]||'info';
+        td[2].textContent=r.traptime||'';
+        td[3].textContent=r.hostname||'';
+        td[4].textContent=r.agentip||'';
+        td[5].textContent=r.formatline||'';
+        existing.classList.add('updated');
+        setTimeout(()=>existing.classList.remove('updated'),700);
+      } else {
+        if(r.id>maxId){
+          const tr=createRow(r);
+          tr.classList.add('updated');
+          tbody.insertBefore(tr, tbody.firstChild);
+          rowMap.set(idStr,tr);
+          maxId=r.id;
+          setTimeout(()=>tr.classList.remove('updated'),700);
+        }
+      }
+    });
+    processing=false;
+    if(updateBuffer.length>0) requestAnimationFrame(processBuffer);
+  }
+
+  // --- Scroll infinito ---
+  const tableWrap=document.getElementById('tableWrap');
+  tableWrap.addEventListener('scroll',()=>{
+    if(!socket || socket.readyState!==WebSocket.OPEN) return;
+    const threshold=300;
+    if(tableWrap.scrollTop + tableWrap.clientHeight + threshold >= tableWrap.scrollHeight){
+      if(!requesting){
+        requesting=true;
+        socket.send(JSON.stringify({type:'getPage',offset:loadedOffset,pageSize:PAGE_SIZE}));
+      }
+    }
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>
