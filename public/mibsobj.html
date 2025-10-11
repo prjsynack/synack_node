@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Tabella Mibsobj</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2>Tabella Mibsobj</h2>
+        <table class="table table-bordered" id="mibsobjTable">
+            <thead>
+                <tr id="tableHeader">
+                    <!-- Intestazioni dinamiche -->
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Dati dinamici -->
+            </tbody>
+        </table>
+        <div id="noDataMsg" class="text-danger" style="display:none;">Nessun dato disponibile.</div>
+    </div>
+    <script>
+        fetch('/api/mibsobj')
+            .then(response => response.json())
+            .then(data => {
+                const body = document.getElementById('tableBody');
+                const noDataMsg = document.getElementById('noDataMsg');
+                if (!data || data.length === 0) {
+                    noDataMsg.style.display = 'block';
+                    return;
+                }
+                // Intestazioni dinamiche
+                const headerRow = document.getElementById('tableHeader');
+                Object.keys(data[0]).forEach(key => {
+                    const th = document.createElement('th');
+                    th.textContent = key;
+                    headerRow.appendChild(th);
+                });
+                // Corpo tabella
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    Object.values(row).forEach(val => {
+                        const td = document.createElement('td');
+                        td.textContent = val;
+                        tr.appendChild(td);
+                    });
+                    body.appendChild(tr);
+                });
+            })
+            .catch(() => {
+                document.getElementById('noDataMsg').style.display = 'block';
+            });
+    </script>
+</body>
+</html>

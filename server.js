@@ -25,6 +25,37 @@ const pool = mysql.createPool({
 const app = express();
 app.use(express.static('public'));
 
+// API per ottenere i dati della tabella mib_oid
+app.get('/api/mibsobj', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM mib_oid');
+    res.json(rows);
+  } catch (err) {
+    console.error('Errore /api/mibsobj:', err);
+    res.status(500).json({ error: 'Errore nel recupero dei dati' });
+  }
+});
+// API per ottenere i dati della tabella nodes (escludendo id)
+app.get('/api/nodes', async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        node_name, 
+        target, 
+        site, 
+        node_type, 
+        node_model, 
+        poll_interval, 
+        poll_retry, 
+        poll_timeout
+      FROM nodes
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error('Errore /api/nodes:', err);
+    res.status(500).json({ error: 'Errore nel recupero dei dati' });
+  }
+});
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
@@ -46,15 +77,15 @@ async function initCheckpoints() {
   }
 }
 
-// Ottieni pagina con optional filtro severity
+// Ottieni pagina con optional filtro severity (se severityFilter != null filtra anche active=1)
 async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null) {
   let q = `
     SELECT id, active, severity, traptime, hostname, agentip, formatline
     FROM rcv_log
   `;
   const params = [];
-  if (severityFilter !== null && !isNaN(parseInt(severityFilter))) {
-    q += ' WHERE severity = ?';
+  if (severityFilter !== null && !isNaN(Number(severityFilter))) {
+    q += ' WHERE severity = ? AND active = 1';
     params.push(severityFilter);
   }
   q += ' ORDER BY id DESC LIMIT ? OFFSET ?';
@@ -83,7 +114,6 @@ async function fetchChanges() {
     LIMIT 5000`;
   const [updatedRows] = await pool.query(updatedRowsQuery);
 
-  // Debug solo se ci sono righe
   if (newRows.length > 0 || updatedRows.length > 0) {
     console.log(`[DEBUG] FetchChanges: nuove=${newRows.length}, aggiornate=${updatedRows.length}`);
   }
@@ -103,12 +133,12 @@ function sendChunksToAllClients(wsServer, rows, type = 'update') {
     wsServer.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         totalClients++;
-        // Se il client ha un filtro attivo, invia solo le righe che corrispondono
+        // Se il client ha un filtro attivo, invia solo le righe che corrispondono e che sono active=1
         if (client.severityFilter === null || client.severityFilter === undefined) {
           client.send(payload);
           totalSent += chunk.length;
         } else {
-          const filtered = chunk.filter(r => r.severity === client.severityFilter);
+          const filtered = chunk.filter(r => Number(r.severity) === Number(client.severityFilter) && Number(r.active) === 1);
           if (filtered.length > 0) {
             client.send(JSON.stringify({ type, rows: filtered }));
             totalSent += filtered.length;
@@ -119,7 +149,6 @@ function sendChunksToAllClients(wsServer, rows, type = 'update') {
     start += MAX_UPDATE_BATCH;
   }
 
-  // 🔍 DEBUG: riepilogo invio righe ai client
   console.log(`[DEBUG] Inviate ${totalSent} righe (${type}) a ${totalClients} client connessi`);
 }
 
@@ -177,12 +206,21 @@ wss.on('connection', async function connection(ws, req) {
       if (msg.type === 'getPage') {
         const offset = parseInt(msg.offset || 0, 10);
         const pageSize = parseInt(msg.pageSize || PAGE_SIZE, 10);
-        const severity = (msg.severity !== undefined && msg.severity !== null) ? parseInt(msg.severity) : ws.severityFilter;
-        ws.severityFilter = isNaN(severity) ? null : severity;
+
+        // ===== nuova logica robusta per interpretare severity
+        if ('severity' in msg) {
+          if (msg.severity === null) {
+            ws.severityFilter = null; // reset esplicito
+          } else {
+            const s = parseInt(msg.severity, 10);
+            ws.severityFilter = isNaN(s) ? null : s;
+          }
+        }
+        // ===== fine parsing
+
         const rows = await fetchPage(offset, pageSize, ws.severityFilter);
         ws.send(JSON.stringify({ type: 'page', offset, rows }));
 
-        // 🔍 DEBUG: log pagina richiesta
         console.log(`[DEBUG] Client ha richiesto pagina offset=${offset}, pageSize=${pageSize}, filtro=${ws.severityFilter ?? 'nessuno'} -> ${rows.length} righe`);
       } else {
         ws.send(JSON.stringify({ type: 'error', message: 'Tipo messaggio non gestito' }));

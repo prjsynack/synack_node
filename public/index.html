@@ -6,7 +6,7 @@
   <title>rcv_log live viewer</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #111; color: #fff; }
-    /* #top { padding: 10px; background:#222; color: #fff; } */
+
     #top {
       padding: 10px;
       background:#222;
@@ -14,11 +14,16 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      z-index: 10;
     }
 
     .status-icon {
       font-size: 18px;
-      margin-right: 10px;
+      margin-right: 30px;
     }
 
     #tableWrap { height: calc(100vh - 50px); overflow: auto; background: #111; }
@@ -43,27 +48,89 @@
     .sev-5 { color: #55ffff; }
     .sev-6 { color: #55ff55; }
 
-    tr.updated { outline: 3px solid rgba(255, 255, 255, 0.25); transition: outline 0.7s ease; }
-
     .dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align: middle; }
     .dot.hidden { visibility:hidden; }
+
+    /* FILTRI SEVERITY */
+    #filters {
+      display: flex;
+      gap: 6px;
+      margin-left: 30px;
+    }
+
+    .filter-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .filter-btn .inner-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: black;
+      visibility: hidden;
+    }
+
+    .filter-btn.active .inner-dot {
+      visibility: visible;
+    }
+
+    .filter-btn[data-severity="0"] { background: #ffffff; }
+    .filter-btn[data-severity="1"] { background: #ff5555; }
+    .filter-btn[data-severity="2"] { background: #ff9900; }
+    .filter-btn[data-severity="3"] { background: #ffff55; }
+    .filter-btn[data-severity="4"] { background: #ff55ff; }
+    .filter-btn[data-severity="5"] { background: #55ffff; }
+    .filter-btn[data-severity="6"] { background: #55ff55; }
+
+
   </style>
 </head>
 <body>
-<div id="top">
-  <strong>SynAck</strong>
-  <span id="statusIcon" class="status-icon">❌</span>
-</div>
+
 
 <div id="tableWrap">
   <table>
-    <thead>
+    <thead style="display: none;">
       <tr>
         <th>Active</th><th>Severity</th><th>Traptime</th><th>Hostname</th><th>Agent IP</th><th>Formatline</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
   </table>
+</div>
+
+<div id="top">
+  <div style="display:flex; align-items:center;">
+    <strong>SynAck</strong>
+    <div id="filters">
+      <button class="filter-btn" data-severity="0"><span class="inner-dot"></span></button>
+      <button class="filter-btn" data-severity="6"><span class="inner-dot"></span></button>
+      <button class="filter-btn" data-severity="5"><span class="inner-dot"></span></button>
+      <button class="filter-btn" data-severity="4"><span class="inner-dot"></span></button>
+      <button class="filter-btn" data-severity="3"><span class="inner-dot"></span></button>
+      <button class="filter-btn" data-severity="2"><span class="inner-dot"></span></button>
+      <button class="filter-btn" data-severity="1"><span class="inner-dot"></span></button>
+    </div>
+  </div>
+  <div style="display:flex; align-items:center; gap:6px;">
+    <button id="toggleHeaderBtn" title="Mostra/Nascondi header" style="padding:2px; cursor:pointer; background:none; border:none;">
+      <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    </button>
+
+    <span id="statusIcon" class="status-icon">❌</span>
+  </div>
 </div>
 
 <script>
@@ -86,6 +153,7 @@
     socket = new WebSocket(wsUrl);
     const statusIcon = document.getElementById('statusIcon');
     socket.addEventListener('open', ()=>{
+      setStatusIcon(true);
       statusIcon.textContent = '✅';
       statusIcon.style.color = '#55ff55';
     });
@@ -98,6 +166,7 @@
       }catch(e){ console.error('WS parse error',e); }
     });
     socket.addEventListener('close', ()=>{
+      setStatusIcon(false);
       statusIcon.textContent = '❌';
       statusIcon.style.color = '#ff5555';
       setTimeout(connect,2000);
@@ -172,18 +241,18 @@
         td[3].textContent=r.hostname||'';
         td[4].textContent=r.agentip||'';
         td[5].textContent=r.formatline||'';
-        existing.classList.add('updated');
-        existing.style.color = severityColors[r.severity] || '#fff';
+        /* existing.classList.add('updated');
+        existing.style.color = severityColors[r.severity] || '#fff'; */
         setTimeout(()=>existing.classList.remove('updated'),700);
       } else {
         if(r.id>maxId){
           added++;
           const tr=createRow(r);
-          tr.classList.add('updated');
+          /* tr.classList.add('updated'); */
           tbody.insertBefore(tr, tbody.firstChild);
           rowMap.set(idStr,tr);
           maxId=r.id;
-          setTimeout(()=>tr.classList.remove('updated'),700);
+          /* setTimeout(()=>tr.classList.remove('updated'),700); */
         }
       }
     });
@@ -207,6 +276,88 @@
   });
 
   connect();
+
+  const filterButtons = document.querySelectorAll('.filter-btn');
+  let activeFilter = null;
+
+  filterButtons.forEach(btn => {
+    const sev = parseInt(btn.getAttribute('data-severity'));
+    btn.title = `Filtra eventi con severity ${severityMap[sev] || 'INFO'}`;
+    btn.addEventListener('click', () => {
+      const severity = parseInt(btn.getAttribute('data-severity'));
+
+      // Toggle logica filtro
+      if (activeFilter === severity) {
+        activeFilter = null; // disabilita filtro
+        btn.classList.remove('active');
+      } else {
+        activeFilter = severity;
+        filterButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      }
+
+      // Richiedi pagina filtrata al server
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        tbody.innerHTML = ''; // pulisci tabella
+        rowMap.clear();
+        loadedOffset = 0;
+
+        socket.send(JSON.stringify({
+          type: 'getPage',
+          offset: 0,
+          pageSize: PAGE_SIZE,
+          severity: activeFilter
+        }));
+      }
+    });
+  });
+
+  /* Visualizza o nascondi Header Tabella eventi */
+  const toggleHeaderBtn = document.getElementById('toggleHeaderBtn');
+  const tableHeader = document.querySelector('table thead');
+  const eyeIcon = document.getElementById('eyeIcon');
+
+  // Nascondi header di default
+  let headerVisible = false;
+  eyeIcon.innerHTML = `
+    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.15 20.15 0 0 1 5.06-6.06"></path>
+    <line x1="1" y1="1" x2="23" y2="23"></line>
+  `;
+
+  toggleHeaderBtn.addEventListener('click', () => {
+    headerVisible = !headerVisible;
+    tableHeader.style.display = headerVisible ? '' : 'none';
+
+    // Cambia icona
+    if(headerVisible){
+      eyeIcon.innerHTML = `
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      `;
+    } else {
+      eyeIcon.innerHTML = `
+        <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.15 20.15 0 0 1 5.06-6.06"></path>
+        <line x1="1" y1="1" x2="23" y2="23"></line>
+      `;
+    }
+  });
+
+  /* StausIcon informazione */
+  const statusIcon = document.getElementById('statusIcon');
+  const serverIp = location.hostname; // oppure un IP fisso, es. '192.168.1.185'
+
+  function setStatusIcon(connected) {
+    if (connected) {
+      statusIcon.textContent = '✅';
+      statusIcon.style.color = '#55ff55';
+      statusIcon.title = `Server ${serverIp} connesso`;
+    } else {
+      statusIcon.textContent = '❌';
+      statusIcon.style.color = '#ff5555';
+      statusIcon.title = `Server ${serverIp} disconnesso`;
+    }
+  }
+
 })();
 </script>
 </body>
