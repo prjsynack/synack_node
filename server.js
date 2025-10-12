@@ -78,18 +78,37 @@ async function initCheckpoints() {
 }
 
 // Ottieni pagina con optional filtro severity (se severityFilter != null filtra anche active=1)
-async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null) {
+// Ottieni pagina con optional filtri: severity, hostname (LIKE), agentip (LIKE)
+async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null, hostnameFilter = null, ipFilter = null) {
   let q = `
-    SELECT id, active, severity, traptime, hostname, agentip, formatline
+    SELECT id, node_id, active, eventname, severity, traptime, hostname, agentip, formatline
     FROM rcv_log
+    WHERE 1=1
   `;
   const params = [];
+
+  // Filtro severity + active=1
   if (severityFilter !== null && !isNaN(Number(severityFilter))) {
-    q += ' WHERE severity = ? AND active = 1';
+    q += ' AND severity = ? AND active = 1';
     params.push(severityFilter);
   }
+
+  // Filtro hostname LIKE
+  if (hostnameFilter !== null && hostnameFilter !== undefined && hostnameFilter !== '') {
+    q += ' AND hostname LIKE ?';
+    params.push(`%${hostnameFilter}%`);
+  }
+
+  // Filtro agentip = (match esatto)
+  if (ipFilter !== null && ipFilter !== '') {
+    q += ' AND agentip = ?';
+    params.push(ipFilter);
+  }
+
+
   q += ' ORDER BY id DESC LIMIT ? OFFSET ?';
   params.push(pageSize, offset);
+
   const [rows] = await pool.query(q, params);
   return rows;
 }
@@ -218,7 +237,11 @@ wss.on('connection', async function connection(ws, req) {
         }
         // ===== fine parsing
 
-        const rows = await fetchPage(offset, pageSize, ws.severityFilter);
+        const hostnameFilter = msg.hostname !== undefined ? msg.hostname : null;
+        const ipFilter = msg.agentip !== undefined ? msg.agentip : null;
+
+        const rows = await fetchPage(offset, pageSize, ws.severityFilter, hostnameFilter, ipFilter);
+
         ws.send(JSON.stringify({ type: 'page', offset, rows }));
 
         console.log(`[DEBUG] Client ha richiesto pagina offset=${offset}, pageSize=${pageSize}, filtro=${ws.severityFilter ?? 'nessuno'} -> ${rows.length} righe`);

@@ -91,6 +91,34 @@
     .filter-btn[data-severity="5"] { background: #55ffff; }
     .filter-btn[data-severity="6"] { background: #55ff55; }
 
+    /* FILTRI HOSTNAME e IP */
+    .text-filter {
+      width: 110px;
+      height: 22px;
+      background: #111;
+      border: 1px solid #333;
+      color: #fff;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 12px;
+    }
+
+    .text-filter:focus {
+      border-color: #55ffff; /* leggero highlight per focus */
+      outline: none;
+    }
+
+    /* quando si seleziona una riga viene evidenziata */
+    tr.selected { background: #333 !important; }
+
+    /* disabilita la selezione del testo quando si seleziona una riga */
+    #tbody tr {
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+    }
+
 
   </style>
 </head>
@@ -108,6 +136,7 @@
   </table>
 </div>
 
+// BARRA INFERIORE
 <div id="top">
   <div style="display:flex; align-items:center;">
     <strong>SynAck</strong>
@@ -119,6 +148,8 @@
       <button class="filter-btn" data-severity="3"><span class="inner-dot"></span></button>
       <button class="filter-btn" data-severity="2"><span class="inner-dot"></span></button>
       <button class="filter-btn" data-severity="1"><span class="inner-dot"></span></button>
+      <input type="text" id="filterHost" class="text-filter" placeholder="Hostname..." />
+      <input type="text" id="filterIP" class="text-filter" placeholder="IP..." />   
     </div>
   </div>
   <div style="display:flex; align-items:center; gap:6px;">
@@ -148,6 +179,7 @@
   let updateBuffer=[], processing=false;
   let requesting=false;
   let maxId=0;
+  let selectedRows = new Set();
 
   function connect() {
     socket = new WebSocket(wsUrl);
@@ -177,8 +209,9 @@
   function createRow(r) {
     const tr = document.createElement('tr');
     tr.dataset.id = r.id;
+    tr.dataset.nodeId = r.node_id;
+    tr.dataset.eventname = r.eventname;
     tr.className = 'sev-'+(r.severity??0);
-
     const tdActive = document.createElement('td');
     const dot = document.createElement('span');
     dot.className='dot'+(r.active==1?'':' hidden');
@@ -275,6 +308,132 @@
     }
   });
 
+  // Gestione selezione multipla righe con click
+  tbody.addEventListener('click', e => {
+    const tr = e.target.closest('tr');
+    if(!tr) return;
+
+    if(e.ctrlKey || e.metaKey){ // Selezione multipla Ctrl/Cmd
+      if(selectedRows.has(tr)){
+        selectedRows.delete(tr);
+        tr.classList.remove('selected');
+      } else {
+        selectedRows.add(tr);
+        tr.classList.add('selected');
+      }
+    } else if(e.shiftKey){ // Selezione intervallo
+      const last = Array.from(selectedRows).pop();
+      if(last){
+        let inRange=false;
+        Array.from(tbody.children).forEach(row=>{
+          if(row===last || row===tr) inRange = !inRange;
+          if(inRange || row===tr) selectedRows.add(row);
+          row.classList.toggle('selected', selectedRows.has(row));
+        });
+      } else {
+        selectedRows.add(tr);
+        tr.classList.add('selected');
+      }
+    } else { // Selezione singola
+      tbody.querySelectorAll('tr.selected').forEach(r=>r.classList.remove('selected'));
+      selectedRows.clear();
+      selectedRows.add(tr);
+      tr.classList.add('selected');
+    }
+  });
+
+  // CONTEXT MENU
+  const contextMenu = document.createElement('div');
+  contextMenu.style.position='fixed';
+  contextMenu.style.background='#222';
+  contextMenu.style.border='1px solid #555';
+  contextMenu.style.padding='4px 0';
+  contextMenu.style.display='none';
+  contextMenu.style.zIndex='1000';
+  contextMenu.style.color='#fff';
+  contextMenu.style.minWidth='140px';
+  contextMenu.style.fontSize='13px';
+  document.body.appendChild(contextMenu);
+
+  const menuItems = [
+    {label:'ACKNOWLEDGE', icon:'✅', action:()=>{
+        const ids = Array.from(selectedRows).map(r=>r.dataset.id);
+        const nodeIds = Array.from(selectedRows).map(r=>r.dataset.nodeId);
+        const eventname = Array.from(selectedRows).map(r=>r.dataset.eventname);
+        console.log('Acknowledge rows', ids, nodeIds, eventname);
+        if(socket && socket.readyState === WebSocket.OPEN){
+          socket.send(JSON.stringify({
+            type: 'acknowledge',
+            rowIds: ids,
+            nodeIds: nodeIds,
+            eventname: eventname  
+          }));
+        }
+
+        // Aggiorna visivamente le righe nella tabella: active = 0
+        selectedRows.forEach(r=>{
+          r.children[0].querySelector('.dot').classList.add('hidden');
+        });
+        selectedRows.clear();
+      }
+    },
+
+    {label:'COPY MESSAGE', icon:'📋', action:()=>{ 
+      const text = Array.from(selectedRows).map(r=>r.children[5].textContent).join('\n');
+      navigator.clipboard.writeText(text);
+    }},
+    {label:'DELETE', icon:'🗑️', action:()=>{ Array.from(selectedRows).forEach(r=>r.remove()); selectedRows.clear(); }}
+  ];
+
+
+  /* ciclo che crea le voci del context menu */
+  menuItems.forEach(item=>{
+    const div = document.createElement('div');
+    div.style.display='flex';
+    div.style.alignItems='center';
+    div.style.padding='6px 8px';
+    div.style.marginBottom='2px';
+    div.style.cursor='pointer';
+
+    // Icona
+    const iconSpan = document.createElement('span');
+    iconSpan.textContent = item.icon;  // emoji
+    iconSpan.style.marginRight = '6px';
+    div.appendChild(iconSpan);
+
+    // Testo
+    const textSpan = document.createElement('span');
+    textSpan.textContent = item.label;
+    div.appendChild(textSpan);
+
+    div.addEventListener('mouseenter',()=>div.style.background='#555');
+    div.addEventListener('mouseleave',()=>div.style.background='transparent');
+    div.addEventListener('click',()=>{
+      item.action();
+      contextMenu.style.display='none';
+    });
+
+    contextMenu.appendChild(div);
+  });
+
+
+  tbody.addEventListener('contextmenu', e=>{
+    e.preventDefault();
+    const tr = e.target.closest('tr');
+    if(tr && !selectedRows.has(tr)){
+      tbody.querySelectorAll('tr.selected').forEach(r=>r.classList.remove('selected'));
+      selectedRows.clear();
+      selectedRows.add(tr);
+      tr.classList.add('selected');
+    }
+    contextMenu.style.top = e.clientY+'px';
+    contextMenu.style.left = e.clientX+'px';
+    contextMenu.style.display='block';
+  });
+
+  // Nascondi menu cliccando altrove
+  document.addEventListener('click', ()=>contextMenu.style.display='none');
+
   connect();
 
   const filterButtons = document.querySelectorAll('.filter-btn');
@@ -357,6 +516,39 @@
       statusIcon.title = `Server ${serverIp} disconnesso`;
     }
   }
+
+  /* Gestione Filtri Hostname e IP */
+  const hostInput = document.getElementById('filterHost');
+  const ipInput = document.getElementById('filterIP');
+
+  function sendFilteredRequest() {
+    tbody.innerHTML = '';
+    rowMap.clear();
+    loadedOffset = 0;
+
+    socket.send(JSON.stringify({
+      type: 'getPage',
+      offset: 0,
+      pageSize: PAGE_SIZE,
+      severity: activeFilter,
+      hostname: hostInput.value.trim() || null,
+      agentip: ipInput.value.trim() || null
+    }));
+  }
+
+  // ENTER per applicare filtro
+  [hostInput, ipInput].forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        sendFilteredRequest();
+      }
+      if (e.key === 'Escape') {
+        input.value = '';
+        sendFilteredRequest();
+      }
+    });
+  });
+
 
 })();
 </script>
