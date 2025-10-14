@@ -103,6 +103,7 @@ async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null
   if (ipFilter !== null && ipFilter !== '') {
     q += ' AND agentip = ?';
     params.push(ipFilter);
+    console.log(`[DEBUG] Filtro IP attivo: ${ipFilter}`);
   }
 
 
@@ -117,20 +118,18 @@ async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null
 async function fetchChanges() {
   // Recupera tutte le righe nuove (id > lastMaxId)
   const newRowsQuery = `
-    SELECT id, active, severity, traptime, hostname, agentip, formatline, updated
+    SELECT id, node_id, active, eventname, severity, traptime, hostname, agentip, formatline, updated
     FROM rcv_log
     WHERE id > ?
-    ORDER BY id ASC
-    LIMIT 5000`;
+    ORDER BY id ASC`;
   const [newRows] = await pool.query(newRowsQuery, [lastMaxId]);
 
   // Recupera tutte le righe aggiornate (updated = 1)
   const updatedRowsQuery = `
-    SELECT id, active, severity, traptime, hostname, agentip, formatline, updated
+    SELECT id, node_id, active, eventname, severity, traptime, hostname, agentip, formatline, updated
     FROM rcv_log
     WHERE updated = 1
-    ORDER BY id ASC
-    LIMIT 5000`;
+    ORDER BY id ASC`;
   const [updatedRows] = await pool.query(updatedRowsQuery);
 
   if (newRows.length > 0 || updatedRows.length > 0) {
@@ -152,12 +151,12 @@ function sendChunksToAllClients(wsServer, rows, type = 'update') {
     wsServer.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         totalClients++;
-        // Se il client ha un filtro attivo, invia solo le righe che corrispondono e che sono active=1
+        // Se il client ha un filtro attivo, invia tutte le righe con quella severity (indipendentemente da active)
         if (client.severityFilter === null || client.severityFilter === undefined) {
           client.send(payload);
           totalSent += chunk.length;
         } else {
-          const filtered = chunk.filter(r => Number(r.severity) === Number(client.severityFilter) && Number(r.active) === 1);
+          const filtered = chunk.filter(r => Number(r.severity) === Number(client.severityFilter));
           if (filtered.length > 0) {
             client.send(JSON.stringify({ type, rows: filtered }));
             totalSent += filtered.length;
@@ -221,7 +220,6 @@ wss.on('connection', async function connection(ws, req) {
   ws.on('message', async function incoming(message) {
     try {
       const msg = JSON.parse(message.toString());
-
       if (msg.type === 'getPage') {
         const offset = parseInt(msg.offset || 0, 10);
         const pageSize = parseInt(msg.pageSize || PAGE_SIZE, 10);
@@ -241,10 +239,40 @@ wss.on('connection', async function connection(ws, req) {
         const ipFilter = msg.agentip !== undefined ? msg.agentip : null;
 
         const rows = await fetchPage(offset, pageSize, ws.severityFilter, hostnameFilter, ipFilter);
+       console.debug(`[DEBUG] fetchPage offset=${offset}, pageSize=${pageSize}, severityFilter=${ws.severityFilter}, hostnameFilter=${hostnameFilter}, ipFilter=${ipFilter} -> ${rows.length} righe`);
 
         ws.send(JSON.stringify({ type: 'page', offset, rows }));
 
         console.log(`[DEBUG] Client ha richiesto pagina offset=${offset}, pageSize=${pageSize}, filtro=${ws.severityFilter ?? 'nessuno'} -> ${rows.length} righe`);
+        } else if (msg.type === 'acknowledge') {
+          const rowIds = Array.isArray(msg.rowIds) ? msg.rowIds : [];
+          const nodeIds = Array.isArray(msg.nodeIds) ? msg.nodeIds : [];
+          const eventnames = Array.isArray(msg.eventname) ? msg.eventname : [];
+
+          console.log('[ACK] Richiesta acknowledge per righe:', rowIds, 'e nodi:', nodeIds, 'e eventname:', eventnames);
+
+          // Aggiorna rcv_log → active = 1 + updated = 0
+          if (rowIds.length > 0) {
+            const placeholders = rowIds.map(() => '?').join(',');
+            await pool.query(
+              `UPDATE rcv_log SET active = 0, updated = 1 WHERE id IN (${placeholders})`,
+              rowIds
+            );
+          }
+
+          // Aggiorna nodes → node_state = 0
+          if (nodeIds.length > 0) {
+            const placeholdersNodes = nodeIds.map(() => '?').join(',');
+            await pool.query(
+              `UPDATE nodes SET node_state = 0 WHERE id IN (${placeholdersNodes})`,
+              nodeIds
+            );
+          }
+
+          // Risposta al client
+          ws.send(JSON.stringify({ type: 'acknowledge_done', rowIds, nodeIds }));
+          console.log('[ACK] Completato per', rowIds.length, 'righe e', nodeIds.length, 'nodi');
+
       } else {
         ws.send(JSON.stringify({ type: 'error', message: 'Tipo messaggio non gestito' }));
       }

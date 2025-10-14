@@ -149,7 +149,8 @@
       <button class="filter-btn" data-severity="2"><span class="inner-dot"></span></button>
       <button class="filter-btn" data-severity="1"><span class="inner-dot"></span></button>
       <input type="text" id="filterHost" class="text-filter" placeholder="Hostname..." />
-      <input type="text" id="filterIP" class="text-filter" placeholder="IP..." />   
+      <input type="text" id="filterIP" class="text-filter" placeholder="IP..." />
+      <button id="resetFilters" title="Reset filtri" style="margin-left:6px; width:28px; height:28px; border-radius:50%; border:1px solid #333; background:#222; color:#fff; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center;">🧹</button>
     </div>
   </div>
   <div style="display:flex; align-items:center; gap:6px;">
@@ -239,9 +240,11 @@
       rowMap.set(String(r.id), tr);
       if(r.id>maxId) maxId=r.id;
     });
+    updateRowVisibility()
   }
 
   function appendRows(rows){
+    console.debug(`[DEBUG] appendRows called with ${rows.length} rows`);
     rows.sort((a,b)=>b.id-a.id);
     rows.forEach(r=>{
       const idStr=String(r.id);
@@ -251,62 +254,87 @@
       rowMap.set(idStr, tr);
       if(r.id>maxId) maxId=r.id;
     });
+    updateRowVisibility()
   }
 
   function queueUpdates(rows){
+    console.debug(`[DEBUG] queueUpdates called with ${rows.length} rows`);
     updateBuffer.push(...rows);
     if(!processing){ processing=true; requestAnimationFrame(processBuffer); }
   }
 
   function processBuffer(){
-    const items=updateBuffer.splice(0,updateBuffer.length);
-    let added=0, updated=0;
-    items.forEach(r=>{
-      const idStr=String(r.id);
-      const existing=rowMap.get(idStr);
+    console.debug(`[DEBUG] processBuffer called with buffer size ${updateBuffer.length}`);
+    const items = updateBuffer.splice(0, updateBuffer.length);
+    let added = 0, updated = 0;
+
+    items.forEach(r => {
+      const idStr = String(r.id);
+      const existing = rowMap.get(idStr);
+
       if(existing){
         updated++;
-        const td=existing.children;
-        td[0].querySelector('.dot').className='dot'+(r.active==1?'':' hidden');
+        const td = existing.children;
+        td[0].querySelector('.dot').className = 'dot' + (r.active == 1 ? '' : ' hidden');
         td[0].querySelector('.dot').style.backgroundColor = severityColors[r.severity] || '#fff';
-        td[1].textContent=severityMap[r.severity]||'info';
-        td[2].textContent=r.traptime||'';
-        td[3].textContent=r.hostname||'';
-        td[4].textContent=r.agentip||'';
-        td[5].textContent=r.formatline||'';
-        /* existing.classList.add('updated');
-        existing.style.color = severityColors[r.severity] || '#fff'; */
-        setTimeout(()=>existing.classList.remove('updated'),700);
+        td[1].textContent = severityMap[r.severity] || 'info';
+        td[2].textContent = r.traptime || '';
+        td[3].textContent = r.hostname || '';
+        td[4].textContent = r.agentip || '';
+        td[5].textContent = r.formatline || '';
+
+        // ✅ PATCH: aggiorna i dataset anche sugli update live
+        existing.dataset.nodeId = r.node_id;
+        existing.dataset.eventname = r.eventname;
+
+        setTimeout(() => existing.classList.remove('updated'), 700);
       } else {
-        if(r.id>maxId){
+        if(r.id > maxId){
           added++;
-          const tr=createRow(r);
-          /* tr.classList.add('updated'); */
+          const tr = createRow(r);
+
+          // ✅ PATCH: assicura anche qui i dataset
+          tr.dataset.nodeId = r.node_id;
+          tr.dataset.eventname = r.eventname;
+
           tbody.insertBefore(tr, tbody.firstChild);
-          rowMap.set(idStr,tr);
-          maxId=r.id;
-          /* setTimeout(()=>tr.classList.remove('updated'),700); */
+          rowMap.set(idStr, tr);
+          maxId = r.id;
         }
       }
     });
-    if(added>0 || updated>0) {
-      console.log(`[DEBUG Client] nuove=${added}, aggiornate=${updated}, totali=${added+updated}`);
+
+    if(added > 0 || updated > 0) {
+      console.debug(`[DEBUG Client] nuove=${added}, aggiornate=${updated}, totali=${added+updated}`);
     }
-    processing=false;
-    if(updateBuffer.length>0) requestAnimationFrame(processBuffer);
+
+    updateRowVisibility();
+    processing = false;
+    if(updateBuffer.length > 0) requestAnimationFrame(processBuffer);
   }
 
-  const tableWrap=document.getElementById('tableWrap');
-  tableWrap.addEventListener('scroll',()=>{
-    if(!socket || socket.readyState!==WebSocket.OPEN) return;
-    const threshold=300;
-    if(tableWrap.scrollTop + tableWrap.clientHeight + threshold >= tableWrap.scrollHeight){
-      if(!requesting){
-        requesting=true;
-        socket.send(JSON.stringify({type:'getPage',offset:loadedOffset,pageSize:PAGE_SIZE}));
+
+    const tableWrap=document.getElementById('tableWrap');
+    tableWrap.addEventListener('scroll',()=>{
+      if(!socket || socket.readyState!==WebSocket.OPEN) return;
+      const threshold=300;
+      if(tableWrap.scrollTop + tableWrap.clientHeight + threshold >= tableWrap.scrollHeight){
+        if(!requesting){
+          requesting = true;
+          const pageSizeToUse = (activeFilter !== null || hostInput.value.trim() || ipInput.value.trim())
+          ? 999999  // o 0 se il server lo interpreta come "no limit"
+          : PAGE_SIZE;
+          socket.send(JSON.stringify({
+            type: 'getPage',
+            offset: loadedOffset,
+            pageSize: pageSizeToUse,
+            severity: activeFilter,
+            hostname: hostInput.value.trim() || null,
+            agentip: ipInput.value.trim() || null
+          }));
+        }
       }
-    }
-  });
+    });
 
   // Gestione selezione multipla righe con click
   tbody.addEventListener('click', e => {
@@ -460,11 +488,13 @@
         tbody.innerHTML = ''; // pulisci tabella
         rowMap.clear();
         loadedOffset = 0;
-
+        const pageSizeToUse = (activeFilter !== null || hostInput.value.trim() || ipInput.value.trim())
+        ? 999999  // o 0 se il server lo interpreta come "no limit"
+        : PAGE_SIZE;
         socket.send(JSON.stringify({
           type: 'getPage',
           offset: 0,
-          pageSize: PAGE_SIZE,
+          pageSize: pageSizeToUse,
           severity: activeFilter
         }));
       }
@@ -522,14 +552,17 @@
   const ipInput = document.getElementById('filterIP');
 
   function sendFilteredRequest() {
+    console.debug('[DEBUG] sendFilteredRequest called. activeFilter:', activeFilter, 'host:', hostInput.value, 'ip:', ipInput.value);
     tbody.innerHTML = '';
     rowMap.clear();
     loadedOffset = 0;
-
+    const pageSizeToUse = (activeFilter !== null || hostInput.value.trim() || ipInput.value.trim())
+    ? 999999  // o 0 se il server lo interpreta come "no limit"
+    : PAGE_SIZE;
     socket.send(JSON.stringify({
       type: 'getPage',
       offset: 0,
-      pageSize: PAGE_SIZE,
+      pageSize: pageSizeToUse,
       severity: activeFilter,
       hostname: hostInput.value.trim() || null,
       agentip: ipInput.value.trim() || null
@@ -548,6 +581,68 @@
       }
     });
   });
+
+  function matchesCurrentFilters(tr) {
+    // tr: DOM tr element
+    let sev = parseInt(tr.className.replace(/[^0-9]/g,'')) || 0;
+    let host = tr.children[3].textContent || '';
+    let ip = tr.children[4].textContent || '';
+    let active = !(tr.children[0].querySelector('.dot').classList.contains('hidden'));
+    // Se almeno un filtro è attivo, mostra solo se active=1 e tutti i filtri corrispondono
+    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim();
+    if (hasFilter) {
+      if (!active) return false;
+      if (activeFilter !== null && sev !== activeFilter) return false;
+      const hostVal = hostInput.value.trim().toLowerCase();
+      if (hostVal && !host.toLowerCase().includes(hostVal)) return false;
+      const ipVal = ipInput.value.trim().toLowerCase();
+      if (ipVal && !ip.toLowerCase().includes(ipVal)) return false;
+      return true;
+    }
+    // Se nessun filtro attivo, mostra sempre
+    return true;
+  }
+  function updateRowVisibility() {
+    console.debug('[DEBUG] updateRowVisibility called. activeFilter:', activeFilter, 'host:', hostInput.value, 'ip:', ipInput.value);
+    // Se nessun filtro attivo, mostra tutto
+    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim();
+    tbody.querySelectorAll('tr').forEach(tr => {
+      if (!hasFilter) {
+        tr.style.display = '';
+      } else {
+        tr.style.display = matchesCurrentFilters(tr) ? '' : 'none';
+      }
+    });
+  }
+
+  // Bottone reset filtri (JS)
+  const resetFiltersBtn = document.getElementById('resetFilters');
+  if (resetFiltersBtn) {
+    resetFiltersBtn.addEventListener('click', () => {
+      // Reset severity
+      activeFilter = null;
+      filterButtons.forEach(b => b.classList.remove('active'));
+      // Reset text
+      hostInput.value = '';
+      ipInput.value = '';
+      // Richiedi pagina completa
+      // Richiedi pagina filtrata al server
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        tbody.innerHTML = ''; // pulisci tabella
+        rowMap.clear();
+        loadedOffset = 0;
+        const pageSizeToUse = (activeFilter !== null || hostInput.value.trim() || ipInput.value.trim())
+        ? 999999  // o 0 se il server lo interpreta come "no limit"
+        : PAGE_SIZE;
+        socket.send(JSON.stringify({
+          type: 'getPage',
+          offset: 0,
+          pageSize: pageSizeToUse,
+          severity: activeFilter
+        }));
+      }
+    });
+  }
 
 
 })();
