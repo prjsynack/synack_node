@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SINDC - Gestione SNMP Mib OID</title>
+</head>
+
+<style>
+    /* BODY */
+    body {
+        font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        overflow-y: hidden;
+    }
+
+    /* HEADER */
+    header {
+        width: 100%;
+        height: 48px;
+        display: flex; /* Use flexbox for alignment */
+        align-items: center; /* Center elements vertically */
+        justify-content: space-between; /* Distribute elements */
+        /*padding: 0 10px; /* Add some padding */
+        background-color: #ffffff; /* Ensure a white background */
+    }
+
+    /* Adjust the suborg image */
+    header img {
+        height: 48px; /* Maintain aspect ratio */
+        width: auto;
+        flex-grow: 1;
+    }
+
+    /* FORM BUTTON CONTAINERS */
+    header form {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+    }
+
+    .external-form, .miboid-form {
+    width: auto;
+    margin-left: 10px; /* Add spacing between buttons */
+    }
+
+    /* Buttons */
+    .external-button, .miboid-button, .logout-button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 5px;
+        transition: background-color 0.3s;
+    }
+
+    .external-button img, .miboid-button img, .logout-button img {
+        width: 40px; /* Set button image size */
+        height: auto;
+        display: block;
+    }
+
+    /* Hover effects */
+    .external-button:hover, .miboid-button:hover, .logout-button:hover {
+        background-color: #dfe0e0; /* Light gray hover effect */
+    }
+
+    /* DIV TABLE_COMPONENT */
+    .table_component {
+        max-height: 900px; /* Set the height of the scrollable area */
+        min-width: 1200px;
+        overflow-y: auto;
+        overflow-x: auto;
+        width: 100%;
+        border-spacing: 1px;
+        table-layout: fixed;
+    }
+    /* TABLE */
+    table {
+        height: 100%;
+        width: 85%;
+        /* to center the table */
+        margin-left: auto;
+        margin-right: auto;
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+    }
+
+    /* THEAD */
+    thead th {
+        position: sticky; /* Makes the header stick */
+        z-index: 2; /* Ensures the header stays above table rows */
+        text-align: left; /* Aligns text in the header */
+        padding: 10px; /* Adds padding for better spacing */
+    }
+
+    /* Riga FILTER */
+    thead tr:nth-child(1) th {
+        top: 0px; /* Stick the first row to the top */
+        z-index: 3; /* Ensure it's on top of the second row */
+        background-color: #ffffff;
+    }
+
+    /* INPUT RIGA FILTER */
+    thead tr:nth-child(1) th input {
+        border-color: rgba(206, 204, 204, 0.486);
+        height: 25px;
+        font-size: small;
+    }
+
+    /* Riga INTESTAZIONE */
+    thead tr:nth-child(2) th {
+        top: 52px; /* Align it flush with the first row */
+        z-index: 4; /* Ensure it appears below the first row */
+        background-color: #eceff1;
+    }
+
+    /* INPUT RIGA INTESTAZIONE */
+    thead tr:nth-child(1) th:nth-child(n+1):nth-child(-n+7) {
+        border-bottom: 1px solid black;
+    }
+
+    /* colore testo INTESTAZIONE */
+    thead tr:nth-child(2) th {
+        border: none;
+        height: 25px;
+        font-size: medium;
+        background-color: #eceff1;
+        font-weight: bold;
+        text-align: center;
+        color: rgb(93, 144, 221);;
+    } */
+
+    thead tr:nth-child(2) th {
+        border-right: 2px solid white;
+        border-left: 2px solid white;
+    }
+
+    thead tr th input {
+        width: 100%;
+    }
+
+    /* TRAPOID */
+    thead tr th:nth-child(1) {
+        width: 500px;
+    }
+    /* CATEGORIA */
+    thead tr th:nth-child(2) {
+        width: 150px;
+    }
+    /* TIPOLOGIA */
+    thead tr th:nth-child(3) {
+        width: 150px;
+    }
+    /* FORMATO LOG */
+    thead tr th:nth-child(4) {
+        width: auto;
+    }
+    /* SEVERITY */
+    thead tr th:nth-child(5) {
+        width: 120px;
+    }
+
+    tbody tr td {
+        border-bottom: 1px solid rgb(178, 201, 236);
+        padding-left: 10px;
+    }
+
+    /* tbody tr td:nth-child(2) input {
+        text-align: center;
+    } */
+
+    .filter_input input:disabled {
+        /* color: rgb(199, 38, 38);         /* Make text black */
+        border: none;         /* No border */
+        background: transparent; /* No background */
+        font-size: 16px;
+        width: 100%;
+        /* text-overflow: ellipsis; */
+    }
+
+    .filter_input input[type="text"]:read-write {
+        border: none; /* Remove border */
+        background-color: whitesmoke; /* Transparent background */
+        color: red;
+        font-size: 16px; /* Adjust font size */
+        padding: 1px; /* Remove padding */
+        margin: 2px; /* Remove margin */
+        outline: none; /* Remove focus outline */
+        width: 100%; /* Optional: Make the input span the full width of the cell */
+        box-sizing: border-box; /* Include padding in width calculation */
+        
+    }
+
+    .filter_input input[type="text"] {
+        pointer-events: none; /* Disable interaction by default */
+        user-select: none; /* Disable text selection by default */
+    }
+    
+    .filter_input tr.selected input[type="text"] {
+        pointer-events: auto; /* Enable interaction for selected rows */
+        user-select: text; /* Allow text selection */
+    }
+
+    /* HIDDEN COLUMN */
+    .hidden {
+        display: none;
+    }
+    
+    /* Highlight riga tabella */
+    table tbody tr:hover td {
+        background-color: #cac9c9; /* Highlight color */
+    }
+
+    .filter_input::-webkit-calendar-picker-indicator {
+        display: none;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .context-menu {
+        position: absolute;
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        width: 120px;
+        padding: 5px 0;
+        font-size: 14px;
+    }
+    
+    .context-menu ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .context-menu ul li {
+        padding: 10px;
+        cursor: pointer;
+    }
+    
+    .context-menu ul li:hover {
+        background-color: #f0f0f0;
+    }
+    
+    .highlighted {
+        background-color: #c9caca;
+    }
+
+    .save-button {
+        display: block;
+        margin: 0 auto;
+        background-color: white;
+        border: none;
+        cursor: pointer;
+    }
+
+    /* Colori per le entry in miboid basate sulla severity */
+    .critical input {
+        color: red !important;
+        font-weight: bold;
+    }
+
+    /* SEVERE (Dark Orange Text for Input) */
+    .severe input {
+        color: orange !important;
+        font-weight: bold;
+    }
+
+    /* MAJOR (Yellow Text for Input) */
+    .major input {
+        color: yellow !important;
+        font-weight: bold;
+    }
+
+    /* MINOR (Light Green Text for Input) */
+    .minor input {
+        color: magenta !important;
+        font-weight: bold;
+    }
+
+    /* WARNING (Blue Text for Input) */
+    .warning input {
+        color: deepskyblue !important;
+        font-weight: bold;
+    }
+
+    /* NORMAL (Green Text for Input) */
+    .normal input {
+        color: limegreen !important;
+        font-weight: bold;
+    }
+
+    /* UNKNOWN (Gray Text for Input) */
+    .unknown input {
+        color: gray !important;
+        font-weight: bold;
+    }
+
+    /* MODAL */
+    /* Modal container (hidden by default) */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0, 0, 0, 0.5); /* Black with opacity */
+  }
+  
+  /* Modal content */
+  .modal-content {
+    background-color: white;
+    margin: 15% auto; /* Center the modal */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 20%; /* Modal width */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+  }
+  
+  /* Close button */
+  .close {
+    color: #aaa;
+    float: right;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  
+  .close:hover,
+  .close:focus {
+    color: red;
+    text-decoration: none;
+  }
+
+</style>
+
+<body>
+    <header>
+        <img src="img/suborg.png">
+
+        <!-- New Button to Open /miboid -->
+        <form action="http://10.144.2.119:3000" method="GET" class="external-form">
+            <button type="submit" class="external-button">
+                <img src="img/sindc.png" alt="External Link">
+            </button>
+        </form>
+
+        <form action="/home" method="GET">
+            <button type="submit" class="miboid-button">
+                <img src="img/node.png" alt="Miboid">
+            </button>
+        </form>
+
+        <form action="/logout" method="POST">
+            <button type="submit" class="logout-button">
+                <img src="img/logout.png">
+            </button>
+        </form>
+    </header>
+    
+    <!-- tabella dati -->
+    <div class="table_component" role="region" tabindex="0">
+        <table>
+            <thead>
+                <tr>
+                    <th>
+                        <input list="data" class="filter_input" name="filter_trapoid" placeholder="Search Trap OID ..." autocomplete="off" oninput="filterRows('trapoid')" onchange="filterRows('trapoid')">
+                    </th>
+                    <th>
+                        <input list="data" class="filter_input" name="filter_category" placeholder="Search Categoria ..." autocomplete="off" oninput="filterRows('category')" onchange="filterRows('category')">
+                    </th>
+                    <th>
+                        <input list="data" class="filter_input" name="filter_enterprise" placeholder="Search Tipologia ..." autocomplete="off" oninput="filterRows('enterprise')" onchange="filterRows('enterprise')">
+                    </th>
+                    <th>
+                        <input list="data" class="filter_input" name="filter_msg" placeholder="Search Messaggio ..." autocomplete="off" oninput="filterRows('msg')" onchange="filterRows('msg')">
+                    </th>
+                    <th>
+                        <input list="data" class="filter_input" name="filter_severity" placeholder="Search Severity ..." autocomplete="off" oninput="filterRows('severity')" onchange="filterRows('severity')">
+                    </th>
+                </tr>
+                <tr>
+                    {% for header in header %}
+                    <th>{{ header }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+    
+            {% for field in data %}
+            <tbody>
+                <tr data-id="{{ field.id }}" data-trapoid="{{ field.trapoid }}" data-category="{{ field.category}}" data-enterprise="{{ field.enterprise }}" data-msg="{{ field.msg }}" data-severity="{{ field.severity }}"
+                class="{% if field.severity == 1 %}critical
+                       {% elif field.severity == 2 %}severe
+                       {% elif field.severity == 3 %}major
+                       {% elif field.severity == 4 %}minor
+                       {% elif field.severity == 5 %}warning
+                       {% elif field.severity == 6 %}normal
+                       {% else %}unknown{% endif %}"
+                >
+                    <td class="hidden" ><input type="text" value="{{ field.id}}" disabled/></td>
+                    <td class="filter_input" ><input contenteditable="True" type="text" value="{{ field.trapoid }}" disabled/></td>
+                    <td class="filter_input" ><input contenteditable="True" type="text" value="{{ field.category }}" disabled/></td>
+                    <td class="filter_input" ><input contenteditable="True" type="text" value="{{ field.enterprise }}" disabled/></td>
+                    <td class="filter_input" ><input contenteditable="True" type="text" value="{{ field.msg }}" disabled/></td>
+                    <!-- <td class="filter_input" ><input contenteditable="True" type="int" value="{{ field.severity }}" disabled/></td> -->
+                    <td class="filter_input">
+                        <input type="text" value="{% if field.severity == 1 %}CRITICAL
+                                                 {% elif field.severity == 2 %}SEVERE
+                                                 {% elif field.severity == 3 %}MAJOR
+                                                 {% elif field.severity == 4 %}MINOR
+                                                 {% elif field.severity == 5 %}WARNING
+                                                 {% elif field.severity == 6 %}NORMAL
+                                                 {% else %}Unknown{% endif %}" disabled/>
+                    </td>
+                </tr>
+            </tbody>
+            {% endfor %}
+        </table>
+        <div id="contextMenu" class="context-menu" style="display: none;">
+            <ul>
+                <li id="addOption">➕ Aggiungi</li>
+                <li id="editOption">✏️ Modifica</li>
+                <li id="deleteOption">🗑️ Cancella</li>
+            </ul>
+        </div>
+    </div>
+    <div id="myModal" class="modal">
+      <div class="modal-content">
+        <span onclick="closeModal()" class="close">&times;</span>
+        <h2></h2>
+        <p id="modalContent">Row details will appear here...</p>
+      </div>
+    </div>
+
+    <script>
+        // AGGIUNTA NODO
+        function addRow() {
+            console.log("addrow");
+        
+            const modal = document.getElementById("myModal");
+            const modalContent = document.getElementById("modalContent");
+        
+            // Clear previous modal content
+            modalContent.innerHTML = "";
+        
+            // Titolo modal di modifica
+            const title = document.createElement("h3");
+            title.textContent = "Aggiungi Nodo";
+            modalContent.appendChild(title);
+        
+            // Create form dynamically
+            const form = document.createElement("form");
+            form.id = "addForm";
+            const fields = [
+                                { label: "Trap oid", name: "trapoid", type: "text", value: "" },
+                                { label: "Categoria", name: "category", type: "text", value: "" },
+                                { label: "Tipologia", name: "enterprise", type: "text", value: "" },
+                                { label: "Log", name: "msg", type: "text", value: "" },
+                                { label: "Severity", name: "severity", type: "number", value: "" },
+                            ];
+            fields.forEach(field => {
+                const fieldContainer = document.createElement("div");
+                fieldContainer.style.marginBottom = "10px";
+        
+                // Create label
+                const label = document.createElement("label");
+                label.textContent = field.label;
+                label.style.display = "block"; // Ensure the label is above the input
+                fieldContainer.appendChild(label);
+        
+                // Create input
+                const input = document.createElement("input");
+                input.type = field.type || "text"; // Default to "text" if no type is provided
+                input.name = field.name;
+                input.value = field.value || ""; // Default to an empty string
+                input.style.width = "100%";
+                input.style.marginTop = "5px";
+        
+                // Append input to container
+                fieldContainer.appendChild(input);
+        
+                // Append container to form
+                form.appendChild(fieldContainer);
+            });
+            
+            // Bottone AGGIUNGI
+            const saveButton = document.createElement("button");
+            saveButton.type = "button";
+            saveButton.textContent = "Add";
+            saveButton.style.marginRight = "10px";
+
+            // Use an anonymous function to handle the click event
+            saveButton.onclick = function() {
+                addNode(); // Ensure saveChanges gets called after form is ready
+            };
+
+            //BOTTONE CANCEL
+            const cancelButton = document.createElement("button");
+            cancelButton.type = "button";
+            cancelButton.textContent = "Cancel";
+            cancelButton.onclick = () => (modal.style.display = "none");
+
+            form.appendChild(saveButton);
+            form.appendChild(cancelButton);
+
+            // Append form to modal content
+            modalContent.appendChild(form);
+
+            // Show the modal (now it will be displayed after form is appended)
+            modal.style.display = "block";
+        }
+
+        // SALVATAGGIO NODO QUANDO SI SELEZIONA AGGIUNGI
+        function addNode(selectedRow) {
+            const form = document.getElementById("addForm");
+
+            // Ensure form is appended and available before using FormData
+            if (!form) {
+                console.error("Form not found!");
+                return;
+            }
+
+            const formData = new FormData(form);
+            const formDataEntries = Array.from(formData.entries());
+
+            let data = {};
+            
+            formDataEntries.forEach(([key, value]) => {
+                    data[key] = value;
+            });
+        
+            console.log('Add entry:', data);
+        
+            fetch('/addmiboid', {
+                method: 'POST', 
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data) // Convert data object to JSON
+            })
+            .then(response => {
+                if (response.ok) {
+                    console.log("Row added successfully: "+data.trapoid);
+                    // alert("Subnet "+data.col0+" aggiunta correttamente")
+                    location.reload(); // Reload the page if needed
+                } else {
+                    return response.json().then(errorData => {
+                        // Show the error message from the server
+                        throw new Error(errorData.detail);
+                    });
+                }
+            })
+            .catch(error => {
+                // Show an alert with the error message (e.g., subnet cannot be empty)
+                alert(`Error: ${error.message}`);
+            });
+        }
+        
+        // CANCELLAZIONE MIB
+        function delRow(id,trapoid, enterprise) {
+            if (confirm(`Sei sicuro di voler cancellare ${trapoid} per la tipologia di apparato ${enterprise}?`)) {
+                fetch(`/deletemiboid/${id}`)
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;  // Aggiorna la pagina
+                }
+                console.log("Cancellata entry: "+trapoid+" [id: "+id+"]")
+            })
+            .catch(error => console.error("Errore: il server non ha risposto con successo in seguito alla cancellazione della entry.", error));
+            } else {
+        
+                console.log("Cancellazione entry annullata dallo user");
+            }
+        }
+
+        // MODIFICA DEL NODO
+        function editRow(selectedRow) {
+            console.log("editrow: "+selectedRow.dataset.trapoid);
+        
+            const modal = document.getElementById("myModal");
+            const modalContent = document.getElementById("modalContent");
+        
+            // Clear previous modal content
+            modalContent.innerHTML = "";
+        
+            // Titolo modal di modifica
+            const title = document.createElement("h3");
+            title.textContent = "Modifica Nodo: "+selectedRow.dataset.trapoid;
+            modalContent.appendChild(title);
+        
+            // Create form dynamically
+            const form = document.createElement("form");
+            form.id = "editForm";
+
+            for (const key in selectedRow.dataset) {
+                if (selectedRow.dataset.hasOwnProperty(key)) {
+                    console.log(`Key: ${key}, Value: ${selectedRow.dataset[key]}`);
+                    if (key !== "id") {
+                        const fieldContainer = document.createElement("div");
+                        fieldContainer.style.marginBottom = "10px";
+                
+                        const label = document.createElement("label");
+                        label.textContent = `${key}: `;
+                        fieldContainer.appendChild(label);
+                
+                        const input = document.createElement("input");
+                        input.type = "text";
+                        input.name = key;
+                        input.value = selectedRow.dataset[key]; // Pre-fill with existing data
+                        input.style.width = "100%";
+                        input.style.marginTop = "5px";
+                        fieldContainer.appendChild(input);
+                        form.appendChild(fieldContainer);
+                    }
+                }
+            }
+        
+            // Bottone SAVE
+            const saveButton = document.createElement("button");
+            saveButton.type = "button";
+            saveButton.textContent = "Save";
+            saveButton.style.marginRight = "10px";
+
+            // Use an anonymous function to handle the click event
+            saveButton.onclick = function() {
+                saveChanges(selectedRow); // Ensure saveChanges gets called after form is ready
+            };
+
+            //BOTTONE CANCEL
+            const cancelButton = document.createElement("button");
+            cancelButton.type = "button";
+            cancelButton.textContent = "Cancel";
+            cancelButton.onclick = () => (modal.style.display = "none");
+
+            form.appendChild(saveButton);
+            form.appendChild(cancelButton);
+
+            // Append form to modal content
+            modalContent.appendChild(form);
+
+            // Show the modal (now it will be displayed after form is appended)
+            modal.style.display = "block";
+        }
+        
+        // SALVATAGGIO NODO MODIFICATO QUANDO SI SELEZIONA SAVE
+        function saveChanges(selectedRow) {
+            const form = document.getElementById("editForm");
+
+            // Ensure form is appended and available before using FormData
+            if (!form) {
+                console.error("Form not found!");
+                return;
+            }
+
+            const formData = new FormData(form);
+            const formDataEntries = Array.from(formData.entries());
+
+            let data = {...selectedRow.dataset};
+            
+            formDataEntries.forEach(([key, value]) => {
+                data[key] = value; // Overwrite dataset values with form data
+            });
+
+            console.log('Updated Row Data:', data);
+        
+            fetch('/updatemiboid', {
+                method: 'POST', 
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (response.ok) {
+                    console.log("Row updated successfully.");
+                    location.reload();
+                    document.getElementById("myModal").style.display = "none"; // Close modal
+                } else {
+                    return response.json().then(errorData => {
+                        throw new Error(errorData.detail);
+                    });
+                }
+            })
+            .catch(error => {
+                alert(`Error: ${error.message}`);
+            });
+            document.getElementById("myModal").style.display = "none";
+        }
+        
+        function getColumnIndex(filterType) {
+            const columnIndices = {
+                'trapoid': 2,    // Index of the "SUBNET" column (2nd column)
+                'category': 3,      // Index of the "DESCRIZIONE" column (3rd column)
+                'enterprise': 4,   // Index of the "SOCIETA'" column (4th column)
+                'msg': 5, // Index of the "UBICAZIONE" column (5th column)
+                'severity': 6       // Index of the "NOTE" column (6th column)
+            };
+            return columnIndices[filterType];
+        }
+        
+        // FILTRO Search...
+        function filterRows(filterType) {
+            console.log("filter rows")
+            // Get the filter value for the corresponding column
+            let filterValue = document.querySelector(`[name="filter_${filterType}"]`).value.toLowerCase();
+            
+            // Get all table rows (excluding the header row)
+            let rows = document.querySelectorAll('tbody tr'); // Select all rows inside tbody
+            
+            // Loop through all rows
+            rows.forEach(row => {
+                // Get the corresponding cell based on the filterType column index
+                let cell = row.querySelector(`td:nth-child(${getColumnIndex(filterType)})`);
+                if (cell) {
+                    let cellText = cell.querySelector('input')?.value.toLowerCase() || ''; // Get input value inside the cell
+                    // Check if the row matches the filter value
+                    if (cellText.includes(filterValue)) {
+                        row.style.display = ''; // Show the row if it matches the filter
+                    } else {
+                        row.style.display = 'none'; // Hide the row if it doesn't match
+                    }
+                }
+            });
+        }
+        
+        function resetFilters() {
+            // Resetta la tabella e mostra tutte le righe
+            const rows = document.querySelectorAll('table tbody tr');
+            rows.forEach(row => {
+                row.style.display = ''; // Reset row visibility to show all rows
+            });
+            //Pulisce i filtri nella head ADD and Search
+            let input = document.querySelector('input');
+            let parentRow = input.closest('tr')
+            if (parentRow) {
+                // Clear the value of all input elements within this row
+                let inputsInRow = parentRow.querySelectorAll('input');
+                inputsInRow.forEach(rowInput => rowInput.value = ''); // Clear each input
+                inputsInRow.forEach(rowInput => rowInput.blur()); // Clear each input
+            }
+        }
+        
+        let enterEditmode = false;
+
+        document.querySelectorAll('.filter_input').forEach(input => {
+            // Prevent datalist from showing on focus
+            input.addEventListener('focus', function(event) {
+                input.setAttribute('list', ''); // Temporarily remove the datalist
+            });
+        
+            // Re-apply list attribute on blur to ensure proper behavior
+            input.addEventListener('blur', function() {
+                input.setAttribute('list', input.getAttribute('data-list-id'));
+            });
+        
+            // Clear input on pressing Escape
+            input.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' && enterEditmode == false) {
+                    console.log('Clear input in the Add and Search row - TASTO ESC');
+                    resetFilters(); // Reset the table filters
+                }
+            });
+        });
+        
+        function closeModal() {
+            const modal = document.getElementById("myModal");
+            // Hide the modal
+            modal.style.display = "none";
+        }
+
+        // GESTIONE CONTENT MENU
+        document.addEventListener("DOMContentLoaded", () => {
+            const contextMenu = document.getElementById("contextMenu");
+            const table = document.querySelector("table"); // Common ancestor
+            let selectedRow = null;
+        
+            // Aggiunge il contextMenu a tutte le td
+            // Show context menu on right-click
+            document.querySelectorAll('tr').forEach(row => {
+                row.addEventListener('contextmenu', function (e) {
+                    e.preventDefault();
+                    selectedRow = row;
+        
+                    // Highlight the selected row
+                    //row.style.backgroundColor = 'black';  // Add a highlight color to the selected row
+        
+                    const { clientX: mouseX, clientY: mouseY } = e;
+        
+                    // Position the context menu at the mouse location
+                    contextMenu.style.left = `${mouseX}px`;
+                    contextMenu.style.top = `${mouseY}px`;
+                    contextMenu.style.display = 'block';
+        
+                    console.log("Selected row:", selectedRow.dataset);
+                });
+            });
+        
+            // quando seleziono l'option Cancella viene richiamata la funzione delRow
+            document.querySelector("#deleteOption").addEventListener("click", () => {
+                const id = selectedRow.dataset.id;
+                const node_name = selectedRow.dataset.node_name;
+                console.log("deleteOption clicked for:", id, node_name);
+                delRow(selectedRow.dataset.id,selectedRow.dataset.trapoid,selectedRow.dataset.enterprise);
+                contextMenu.style.display = "none";
+            });
+        
+            // quando seleziono l'option Modifica viene richiamata la funzione editRow
+            document.getElementById('editOption').addEventListener('click', function () {
+                console.log("editOption clicked for:", selectedRow);
+                editRow(selectedRow)
+                contextMenu.style.display = 'none';
+            });
+
+            // quando seleziono l'option Aggiungi viene richiamata la funzione addRow
+            document.getElementById('addOption').addEventListener('click', function () {
+                console.log("addOption clicked");
+                addRow()
+                contextMenu.style.display = 'none';
+            });
+            
+        
+            document.addEventListener('click', function (e) {
+                if (contextMenu.style.display === 'block' && !contextMenu.contains(e.target)) {
+                    contextMenu.style.display = 'none';
+                }
+            });
+        
+            // Keep context menu open when clicked
+            contextMenu.addEventListener("click", (event) => {
+                console.log("click")
+                event.stopPropagation();
+            });
+        });
+    </script>
+
+</body>
+</html>

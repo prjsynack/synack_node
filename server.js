@@ -26,7 +26,7 @@ const app = express();
 app.use(express.static('public'));
 
 // API per ottenere i dati della tabella mib_oid
-app.get('/api/mibsobj', async (req, res) => {
+app.get('/miboid', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM mib_oid');
     res.json(rows);
@@ -103,7 +103,7 @@ async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null
   if (ipFilter !== null && ipFilter !== '') {
     q += ' AND agentip = ?';
     params.push(ipFilter);
-    console.log(`[DEBUG] Filtro IP attivo: ${ipFilter}`);
+    console.debug(`[DEBUG] Filtro IP attivo: ${ipFilter}`);
   }
 
 
@@ -133,7 +133,7 @@ async function fetchChanges() {
   const [updatedRows] = await pool.query(updatedRowsQuery);
 
   if (newRows.length > 0 || updatedRows.length > 0) {
-    console.log(`[DEBUG] FetchChanges: nuove=${newRows.length}, aggiornate=${updatedRows.length}`);
+    console.debug(`[DEBUG] FetchChanges: nuove=${newRows.length}, aggiornate=${updatedRows.length}`);
   }
 
   return { newRows, updatedRows };
@@ -167,7 +167,7 @@ function sendChunksToAllClients(wsServer, rows, type = 'update') {
     start += MAX_UPDATE_BATCH;
   }
 
-  console.log(`[DEBUG] Inviate ${totalSent} righe (${type}) a ${totalClients} client connessi`);
+  console.debug(`[DEBUG] Inviate ${totalSent} righe (${type}) a ${totalClients} client connessi`);
 }
 
 async function pollingLoop() {
@@ -187,7 +187,7 @@ async function pollingLoop() {
       const maxIdInCombined = Math.max(...uniqueRows.map(r => r.id || 0), lastMaxId);
       lastMaxId = Math.max(lastMaxId, maxIdInCombined);
 
-      console.log(`[DEBUG] Polling completato: totali unici=${uniqueRows.length}, lastMaxId=${lastMaxId}`);
+      console.debug(`[DEBUG] Polling completato: totali unici=${uniqueRows.length}, lastMaxId=${lastMaxId}`);
 
       // Reset del flag updated sulle righe inviate
       const idsToReset = uniqueRows.map(r => r.id);
@@ -239,11 +239,11 @@ wss.on('connection', async function connection(ws, req) {
         const ipFilter = msg.agentip !== undefined ? msg.agentip : null;
 
         const rows = await fetchPage(offset, pageSize, ws.severityFilter, hostnameFilter, ipFilter);
-       console.debug(`[DEBUG] fetchPage offset=${offset}, pageSize=${pageSize}, severityFilter=${ws.severityFilter}, hostnameFilter=${hostnameFilter}, ipFilter=${ipFilter} -> ${rows.length} righe`);
+        console.debug(`[DEBUG] fetchPage offset=${offset}, pageSize=${pageSize}, severityFilter=${ws.severityFilter}, hostnameFilter=${hostnameFilter}, ipFilter=${ipFilter} -> ${rows.length} righe`);
 
         ws.send(JSON.stringify({ type: 'page', offset, rows }));
 
-        console.log(`[DEBUG] Client ha richiesto pagina offset=${offset}, pageSize=${pageSize}, filtro=${ws.severityFilter ?? 'nessuno'} -> ${rows.length} righe`);
+        console.debug(`[DEBUG] Client ha richiesto pagina offset=${offset}, pageSize=${pageSize}, filtro=${ws.severityFilter ?? 'nessuno'} -> ${rows.length} righe`);
         } else if (msg.type === 'acknowledge') {
           const rowIds = Array.isArray(msg.rowIds) ? msg.rowIds : [];
           const nodeIds = Array.isArray(msg.nodeIds) ? msg.nodeIds : [];
@@ -271,7 +271,7 @@ wss.on('connection', async function connection(ws, req) {
 
           // Risposta al client
           ws.send(JSON.stringify({ type: 'acknowledge_done', rowIds, nodeIds }));
-          console.log('[ACK] Completato per', rowIds.length, 'righe e', nodeIds.length, 'nodi');
+          console.debug('[ACK] Completato per', rowIds.length, 'righe e', nodeIds.length, 'nodi');
 
       } else {
         ws.send(JSON.stringify({ type: 'error', message: 'Tipo messaggio non gestito' }));

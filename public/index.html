@@ -31,7 +31,7 @@
     th, td { padding: 6px 8px; border-bottom: 1px solid #333; font-size: 13px; text-align: left; }
     th { position: sticky; top: 0; background: #222; z-index: 2; }
 
-    th:nth-child(1), td:nth-child(1) { width: 15px; }
+    th:nth-child(1), td:nth-child(1) { width: 5px; }
     th:nth-child(2), td:nth-child(2) { width: 80px; }
     th:nth-child(3), td:nth-child(3) { width: 140px; }
     th:nth-child(4), td:nth-child(4) { width: 200px; }
@@ -388,7 +388,7 @@
         const ids = Array.from(selectedRows).map(r=>r.dataset.id);
         const nodeIds = Array.from(selectedRows).map(r=>r.dataset.nodeId);
         const eventname = Array.from(selectedRows).map(r=>r.dataset.eventname);
-        console.log('Acknowledge rows', ids, nodeIds, eventname);
+        console.debug('Acknowledge rows', ids, nodeIds, eventname);
         if(socket && socket.readyState === WebSocket.OPEN){
           socket.send(JSON.stringify({
             type: 'acknowledge',
@@ -469,7 +469,7 @@
 
   filterButtons.forEach(btn => {
     const sev = parseInt(btn.getAttribute('data-severity'));
-    btn.title = `Filtra eventi con severity ${severityMap[sev] || 'INFO'}`;
+    btn.title = `Eventi ATTIVI con severity ${severityMap[sev] || 'INFO'}`;
     btn.addEventListener('click', () => {
       const severity = parseInt(btn.getAttribute('data-severity'));
 

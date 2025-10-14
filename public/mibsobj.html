@@ -21,7 +21,7 @@
         <div id="noDataMsg" class="text-danger" style="display:none;">Nessun dato disponibile.</div>
     </div>
     <script>
-        fetch('/api/mibsobj')
+        fetch('/miboid')
             .then(response => response.json())
             .then(data => {
                 const body = document.getElementById('tableBody');
