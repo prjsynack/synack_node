@@ -114,7 +114,7 @@ async function fetchPage(offset = 0, pageSize = PAGE_SIZE, activeOnly = null, se
     console.debug(`[DEBUG] Filtro IP attivo: ${ipFilter}`);
   }
 
-  // Filtro intervallo temporale utctime
+  // Filtro intervallo temporale traptime
   console.debug(`[DEBUG] Filtro timeFrom: ${timeFrom}, timeTo: ${timeTo}`);
   if (timeFrom !== null && timeTo !== null) {
     q += " AND traptime BETWEEN ? AND ?";
