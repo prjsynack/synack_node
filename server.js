@@ -4,6 +4,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const mysql = require('mysql2/promise');
+const { time } = require('console');
 
 const PORT = process.env.PORT || 3000;
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '2000', 10);
@@ -79,24 +80,31 @@ async function initCheckpoints() {
 
 // Ottieni pagina con optional filtro severity (se severityFilter != null filtra anche active=1)
 // Ottieni pagina con optional filtri: severity, hostname (LIKE), agentip (LIKE)
-async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null, hostnameFilter = null, ipFilter = null) {
+async function fetchPage(offset = 0, pageSize = PAGE_SIZE, activeOnly = null, severityFilter = null, hostnameFilter = null, ipFilter = null, timeFrom = null, timeTo = null ) {
   let q = `
-    SELECT id, node_id, active, eventname, severity, traptime, hostname, agentip, formatline
+    SELECT id, node_id, active, eventname, severity, utctime, traptime, hostname, agentip, formatline
     FROM rcv_log
     WHERE 1=1
   `;
   const params = [];
 
+  // Filtro activeOnly
+  if (activeOnly === true) {
+    q += ' AND active = 1';
+  }
+
   // Filtro severity + active=1
   if (severityFilter !== null && !isNaN(Number(severityFilter))) {
-    q += ' AND severity = ? AND active = 1';
+    q += ' AND severity = ?';
     params.push(severityFilter);
+    console.debug(`[DEBUG] Filtro severity attivo: ${severityFilter}`);
   }
 
   // Filtro hostname LIKE
   if (hostnameFilter !== null && hostnameFilter !== undefined && hostnameFilter !== '') {
     q += ' AND hostname LIKE ?';
     params.push(`%${hostnameFilter}%`);
+    console.debug(`[DEBUG] Filtro hostname attivo: ${hostnameFilter}`);
   }
 
   // Filtro agentip = (match esatto)
@@ -106,10 +114,17 @@ async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null
     console.debug(`[DEBUG] Filtro IP attivo: ${ipFilter}`);
   }
 
+  // Filtro intervallo temporale utctime
+  console.debug(`[DEBUG] Filtro timeFrom: ${timeFrom}, timeTo: ${timeTo}`);
+  if (timeFrom !== null && timeTo !== null) {
+    q += " AND utctime BETWEEN ? AND ?";
+    params.push(timeFrom, timeTo);
+  }
+
 
   q += ' ORDER BY id DESC LIMIT ? OFFSET ?';
   params.push(pageSize, offset);
-
+  console.debug(`[DEBUG] fetchPage query: ${q} con params:`, params); 
   const [rows] = await pool.query(q, params);
   return rows;
 }
@@ -118,7 +133,7 @@ async function fetchPage(offset = 0, pageSize = PAGE_SIZE, severityFilter = null
 async function fetchChanges() {
   // Recupera tutte le righe nuove (id > lastMaxId)
   const newRowsQuery = `
-    SELECT id, node_id, active, eventname, severity, traptime, hostname, agentip, formatline, updated
+    SELECT id, node_id, active, eventname, severity, utctime, traptime, hostname, agentip, formatline, updated
     FROM rcv_log
     WHERE id > ?
     ORDER BY id ASC`;
@@ -126,7 +141,7 @@ async function fetchChanges() {
 
   // Recupera tutte le righe aggiornate (updated = 1)
   const updatedRowsQuery = `
-    SELECT id, node_id, active, eventname, severity, traptime, hostname, agentip, formatline, updated
+    SELECT id, node_id, active, eventname, severity, utctime, traptime, hostname, agentip, formatline, updated
     FROM rcv_log
     WHERE updated = 1
     ORDER BY id ASC`;
@@ -210,6 +225,7 @@ wss.on('connection', async function connection(ws, req) {
   ws.severityFilter = null;
 
   try {
+    console.log('Fetching initial page for new client');
     const rows = await fetchPage(0, PAGE_SIZE, ws.severityFilter);
     ws.send(JSON.stringify({ type: 'init', rows }));
   } catch (err) {
@@ -237,13 +253,20 @@ wss.on('connection', async function connection(ws, req) {
 
         const hostnameFilter = msg.hostname !== undefined ? msg.hostname : null;
         const ipFilter = msg.agentip !== undefined ? msg.agentip : null;
+        const activeOnly = msg.active === 1;
+        const timeTo = msg.timeTo !== undefined ? msg.timeTo : null;
+        const timeFrom = msg.timeFrom !== undefined ? msg.timeFrom : null;
+        const totalrows = await fetchPage(offset, pageSize, activeOnly, ws.severityFilter, hostnameFilter, ipFilter,timeFrom,timeTo);
+        let rows = totalrows;
+        if (rows.length > 50) {
+          rows = rows.slice(0, 50);
+          console.debug(`[DEBUG] getPage: richieste ${totalrows.length} righe, invio solo prime 50`);
+        }
 
-        const rows = await fetchPage(offset, pageSize, ws.severityFilter, hostnameFilter, ipFilter);
-        console.debug(`[DEBUG] fetchPage offset=${offset}, pageSize=${pageSize}, severityFilter=${ws.severityFilter}, hostnameFilter=${hostnameFilter}, ipFilter=${ipFilter} -> ${rows.length} righe`);
+        console.debug(`[DEBUG] getPage: offset=${offset}, pageSize=${pageSize}, activeOnly=${activeOnly}, severityFilter=${ws.severityFilter}, hostnameFilter=${hostnameFilter}, ipFilter=${ipFilter}, timeFrom=${timeFrom}, timeTo=${timeTo} → righe trovate=${totalrows.length}, inviate=${rows.length}`);  
 
         ws.send(JSON.stringify({ type: 'page', offset, rows }));
 
-        console.debug(`[DEBUG] Client ha richiesto pagina offset=${offset}, pageSize=${pageSize}, filtro=${ws.severityFilter ?? 'nessuno'} -> ${rows.length} righe`);
         } else if (msg.type === 'acknowledge') {
           const rowIds = Array.isArray(msg.rowIds) ? msg.rowIds : [];
           const nodeIds = Array.isArray(msg.nodeIds) ? msg.nodeIds : [];

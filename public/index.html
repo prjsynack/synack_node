@@ -1,5 +1,10 @@
 <!doctype html>
 <html lang="it">
+  <!-- Flatpickr -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -139,8 +144,9 @@
 // BARRA INFERIORE
 <div id="top">
   <div style="display:flex; align-items:center;">
-    <strong>SynAck</strong>
+    <!-- <strong>SynAck</strong> -->
     <div id="filters">
+      <button id="filterActiveBtn" title="Mostra solo eventi attivi" style="width:28px; height:28px; border-radius:50%; border:1px solid #333; background:#222; color:#55ff55; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;">A</button>
       <button class="filter-btn" data-severity="0"><span class="inner-dot"></span></button>
       <button class="filter-btn" data-severity="6"><span class="inner-dot"></span></button>
       <button class="filter-btn" data-severity="5"><span class="inner-dot"></span></button>
@@ -148,11 +154,39 @@
       <button class="filter-btn" data-severity="3"><span class="inner-dot"></span></button>
       <button class="filter-btn" data-severity="2"><span class="inner-dot"></span></button>
       <button class="filter-btn" data-severity="1"><span class="inner-dot"></span></button>
-      <input type="text" id="filterHost" class="text-filter" placeholder="Hostname..." />
-      <input type="text" id="filterIP" class="text-filter" placeholder="IP..." />
-      <button id="resetFilters" title="Reset filtri" style="margin-left:6px; width:28px; height:28px; border-radius:50%; border:1px solid #333; background:#222; color:#fff; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center;">🧹</button>
     </div>
   </div>
+
+  <div>
+      <input type="text" id="filterHost" class="text-filter" placeholder="Hostname..." />
+      <input type="text" id="filterIP" class="text-filter" placeholder="IP..." />
+  </div>
+  
+  <div style="display:flex; gap:6px; align-items:center; background:#222; padding:6px; border-radius:4px;">
+      <input type="datetime-local" id="timeFrom"
+          style="background:#333; color:#eee; border:1px solid #555; padding:4px; font-size:12px;">
+      
+      <span>↔️</span>
+
+      <input type="datetime-local" id="timeTo"
+          style="background:#333; color:#eee; border:1px solid #555; padding:4px; font-size:12px;">
+
+      <button id="applyTimeFilterBtn"
+          title="Filtra per intervallo temporale"
+          style="background:#444; border:1px solid #666; padding:4px 6px; cursor:pointer; border-radius:3px;">
+          ⏳
+      </button>
+  </div>
+
+  <div>
+      <button id="resetFilters" title="Reset filtri" style="margin-left:6px; width:28px; height:28px; border-radius:50%; border:1px solid #333; background:#222; color:#fff; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center;">🧹</button>
+  </div>
+
+   <div>
+      <button id="goFirstBtn" title="PAGE DOWN" style="padding:2px; cursor:pointer; background:none; border:none; font-size:16px;">🔽</button>
+      <button id="goLastBtn" title="PAGE UP" style="padding:2px; cursor:pointer; background:none; border:none; font-size:16px;">🔼</button>
+  </div>
+
   <div style="display:flex; align-items:center; gap:6px;">
     <button id="toggleHeaderBtn" title="Mostra/Nascondi header" style="padding:2px; cursor:pointer; background:none; border:none;">
       <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -328,9 +362,12 @@
             type: 'getPage',
             offset: loadedOffset,
             pageSize: pageSizeToUse,
+            active: activeOnly ? 1 : null,
             severity: activeFilter,
             hostname: hostInput.value.trim() || null,
-            agentip: ipInput.value.trim() || null
+            agentip: ipInput.value.trim() || null,
+            timeFrom: timeFrom,
+            timeTo: timeTo
           }));
         }
       }
@@ -491,11 +528,15 @@
         const pageSizeToUse = (activeFilter !== null || hostInput.value.trim() || ipInput.value.trim())
         ? 999999  // o 0 se il server lo interpreta come "no limit"
         : PAGE_SIZE;
+        console.log(`[DEBUG] Requesting page with filter severity=${activeFilter}, host='${hostInput.value.trim()}', ip='${ipInput.value.trim()}', activeOnly=${activeOnly}`);
         socket.send(JSON.stringify({
           type: 'getPage',
           offset: 0,
           pageSize: pageSizeToUse,
-          severity: activeFilter
+          active: activeOnly ? 1 : null,
+          severity: activeFilter,
+          timeFrom: timeFrom,   
+          timeTo: timeTo
         }));
       }
     });
@@ -552,7 +593,7 @@
   const ipInput = document.getElementById('filterIP');
 
   function sendFilteredRequest() {
-    console.debug('[DEBUG] sendFilteredRequest called. activeFilter:', activeFilter, 'host:', hostInput.value, 'ip:', ipInput.value);
+    console.debug('[DEBUG] sendFilteredRequest called. activeFilter:', activeFilter, 'host:', hostInput.value, 'ip:', ipInput.value, 'activeOnly:', activeOnly, 'timeFrom:', timeFrom, 'timeTo:', timeTo);
     tbody.innerHTML = '';
     rowMap.clear();
     loadedOffset = 0;
@@ -563,9 +604,12 @@
       type: 'getPage',
       offset: 0,
       pageSize: pageSizeToUse,
+      active: activeOnly ? 1 : null,
       severity: activeFilter,
       hostname: hostInput.value.trim() || null,
-      agentip: ipInput.value.trim() || null
+      agentip: ipInput.value.trim() || null,
+      timeFrom: timeFrom,
+      timeTo: timeTo
     }));
   }
 
@@ -591,7 +635,7 @@
     // Se almeno un filtro è attivo, mostra solo se active=1 e tutti i filtri corrispondono
     const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim();
     if (hasFilter) {
-      if (!active) return false;
+      //if (!active) return false;
       if (activeFilter !== null && sev !== activeFilter) return false;
       const hostVal = hostInput.value.trim().toLowerCase();
       if (hostVal && !host.toLowerCase().includes(hostVal)) return false;
@@ -619,14 +663,26 @@
   const resetFiltersBtn = document.getElementById('resetFilters');
   if (resetFiltersBtn) {
     resetFiltersBtn.addEventListener('click', () => {
-      // Reset severity
+      // Reset severity filter
       activeFilter = null;
       filterButtons.forEach(b => b.classList.remove('active'));
-      // Reset text
+
+      // Reset text filters
       hostInput.value = '';
       ipInput.value = '';
+
+      // Clear time inputs
+      const timeFromInput = document.getElementById('timeFrom');
+      const timeToInput = document.getElementById('timeTo');
+      if (timeFromInput) timeFromInput.value = '';
+      if (timeToInput) timeToInput.value = '';
+      
+      // Reset active-only filter
+      activeOnly = null;
+      filterActiveBtn.style.borderColor = '#333';
+      filterActiveBtn.style.color = '#888';
+
       // Richiedi pagina completa
-      // Richiedi pagina filtrata al server
       if (socket && socket.readyState === WebSocket.OPEN) {
         tbody.innerHTML = ''; // pulisci tabella
         rowMap.clear();
@@ -638,11 +694,113 @@
           type: 'getPage',
           offset: 0,
           pageSize: pageSizeToUse,
-          severity: activeFilter
+          severity: activeFilter,
+          hostname: null,
+          agentip: null,
+          active: activeOnly ? 1 : null,
+          timeFrom: null,
+          timeTo: null
         }));
       }
     });
   }
+
+  let activeOnly = null; // filtro eventi attivi
+  const filterActiveBtn = document.getElementById('filterActiveBtn');
+
+  // GESTIONE BOTTONE ACTIVE
+
+  // Imposta lo stile di default come "spento"
+  filterActiveBtn.style.borderColor = '#333';
+  filterActiveBtn.style.color = '#888';
+  filterActiveBtn.addEventListener('click', () => {
+    if (activeOnly === null) {
+        activeOnly = 1;   // primo click → MOSTRA SOLO ATTIVI
+    } else {
+        activeOnly = null; // secondo click → MOSTRA TUTTI
+    }
+    filterActiveBtn.style.borderColor = activeOnly ? '#55ff55' : '#333';
+    filterActiveBtn.style.color = activeOnly ? '#55ff55' : '#888';
+    console.debug('[DEBUG] Filtro activeOnly toggled to', activeOnly);
+    // Pulisci tabella e richiedi con il nuovo filtro
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      tbody.innerHTML = ''; 
+      rowMap.clear();
+      loadedOffset = 0;
+      const pageSizeToUse = (activeFilter !== null || hostInput.value.trim() || ipInput.value.trim() || activeOnly)
+        ? 999999
+        : PAGE_SIZE;
+      console.log(`[DEBUG] Requesting page with filter severity=${activeFilter}, host='${hostInput.value.trim()}', ip='${ipInput.value.trim()}', activeOnly=${activeOnly}`);
+      socket.send(JSON.stringify({
+        type: 'getPage',
+        offset: 0,
+        pageSize: pageSizeToUse,
+        severity: activeFilter,
+        hostname: hostInput.value.trim() || null,
+        agentip: ipInput.value.trim() || null,
+        active: activeOnly ? 1 : null,   // <- ✅ INVIA IL NUOVO FILTRO ACTIVE AL SERVER
+        timeFrom: timeFrom,
+        timeTo: timeTo  
+      }));
+    }
+  });
+
+  // PAGE UP/DOWN
+  let currentScrollIndex = 0; // posizione corrente nella tabella (0 = top)
+
+  function resetScrollIndex() {
+    currentScrollIndex = 0;
+  }
+
+  goLastBtn.addEventListener('click', () => {
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length === 0) return;
+
+    currentScrollIndex = Math.max(0, currentScrollIndex - 45);
+
+    const targetRow = rows[currentScrollIndex];
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetRow.classList.add('selected');
+      setTimeout(() => targetRow.classList.remove('selected'), 600);
+    }
+  });
+
+  goFirstBtn.addEventListener('click', () => {
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length === 0) return;
+
+    currentScrollIndex = Math.min(rows.length - 1, currentScrollIndex + 45);
+
+    const targetRow = rows[currentScrollIndex];
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetRow.classList.add('selected');
+      setTimeout(() => targetRow.classList.remove('selected'), 600);
+    }
+  });
+
+  let timeFrom = null;
+  let timeTo = null;
+
+  document.getElementById('applyTimeFilterBtn').addEventListener('click', () => {
+      const fromInput = document.getElementById('timeFrom').value;
+      const toInput = document.getElementById('timeTo').value;
+
+      timeFrom = fromInput ? new Date(fromInput).toISOString() : null;
+      timeTo = toInput ? new Date(toInput).toISOString() : null;
+
+      console.debug("[DEBUG] Time filter applied:", timeFrom, timeTo);
+
+      // Manda richiesta al server
+      if (socket && socket.readyState === WebSocket.OPEN) {
+          sendFilteredRequest(); // <- assicurati che include anche timeFrom/timeTo
+      }
+  });
+
+
+
+
 
 
 })();
