@@ -1,9 +1,11 @@
 <!doctype html>
 <html lang="it">
-  <!-- Flatpickr -->
+
+<!-- Flatpickr CSS & JS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
 
 <head>
   <meta charset="utf-8" />
@@ -163,17 +165,10 @@
   </div>
   
   <div style="display:flex; gap:6px; align-items:center; background:#222; padding:6px; border-radius:4px;">
-      <input type="datetime-local" id="timeFrom"
-          style="background:#333; color:#eee; border:1px solid #555; padding:4px; font-size:12px;">
-      
+      <input id="timeFrom" type="text" placeholder="Start datetime" style="background:#333; color:#eee; border:1px solid #555; padding:4px; font-size:12px;">
       <span>↔️</span>
-
-      <input type="datetime-local" id="timeTo"
-          style="background:#333; color:#eee; border:1px solid #555; padding:4px; font-size:12px;">
-
-      <button id="applyTimeFilterBtn"
-          title="Filtra per intervallo temporale"
-          style="background:#444; border:1px solid #666; padding:4px 6px; cursor:pointer; border-radius:3px;">
+      <input id="timeTo" type="text" placeholder="End datetime" style="background:#333; color:#eee; border:1px solid #555; padding:4px; font-size:12px;">
+      <button id="applyTimeFilterBtn" title="Filtra per intervallo temporale" style="background:#444; border:1px solid #666; padding:4px 6px; cursor:pointer; border-radius:3px;">
           ⏳
       </button>
   </div>
@@ -780,21 +775,31 @@
     }
   });
 
+  
   let timeFrom = null;
   let timeTo = null;
+  // Initialize Flatpickr datetimepickers
+  flatpickr("#timeFrom", {
+      enableTime: true,
+      dateFormat: "Y-m-d H:i:S",
+      time_24hr: true
+  });
 
+  flatpickr("#timeTo", {
+      enableTime: true,
+      dateFormat: "Y-m-d H:i:S",
+      time_24hr: true
+  });
+
+  // Click handler
   document.getElementById('applyTimeFilterBtn').addEventListener('click', () => {
-      const fromInput = document.getElementById('timeFrom').value;
-      const toInput = document.getElementById('timeTo').value;
-
-      timeFrom = fromInput ? new Date(fromInput).toISOString() : null;
-      timeTo = toInput ? new Date(toInput).toISOString() : null;
+      timeFrom = document.getElementById('timeFrom').value;
+      timeTo   = document.getElementById('timeTo').value;
 
       console.debug("[DEBUG] Time filter applied:", timeFrom, timeTo);
 
-      // Manda richiesta al server
       if (socket && socket.readyState === WebSocket.OPEN) {
-          sendFilteredRequest(); // <- assicurati che include anche timeFrom/timeTo
+          sendFilteredRequest();
       }
   });
 
