@@ -429,7 +429,6 @@
             eventname: eventname  
           }));
         }
-
         // Aggiorna visivamente le righe nella tabella: active = 0
         selectedRows.forEach(r=>{
           r.children[0].querySelector('.dot').classList.add('hidden');
@@ -627,24 +626,24 @@
     let host = tr.children[3].textContent || '';
     let ip = tr.children[4].textContent || '';
     let active = !(tr.children[0].querySelector('.dot').classList.contains('hidden'));
-    // Se almeno un filtro è attivo, mostra solo se active=1 e tutti i filtri corrispondono
-    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim();
+    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim() || (activeOnly !== null);
     if (hasFilter) {
-      //if (!active) return false;
+      if (activeOnly === 1 && !active) return false;
       if (activeFilter !== null && sev !== activeFilter) return false;
       const hostVal = hostInput.value.trim().toLowerCase();
       if (hostVal && !host.toLowerCase().includes(hostVal)) return false;
       const ipVal = ipInput.value.trim().toLowerCase();
-      if (ipVal && !ip.toLowerCase().includes(ipVal)) return false;
+      if (ipVal && !ip.toLowerCase().includes(ipVal)) return false;  
       return true;
     }
     // Se nessun filtro attivo, mostra sempre
     return true;
   }
   function updateRowVisibility() {
-    console.debug('[DEBUG] updateRowVisibility called. activeFilter:', activeFilter, 'host:', hostInput.value, 'ip:', ipInput.value);
+    console.debug('[DEBUG] updateRowVisibility called. activeFilter:', activeFilter, 'host:', hostInput.value, 'ip:', ipInput.value, 'activeOnly:', activeOnly, 'timeFrom:', timeFrom, 'timeTo:', timeTo);
     // Se nessun filtro attivo, mostra tutto
-    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim();
+    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim() || (activeOnly !== null);
+    console.debug('[DEBUG] hasFilter:', hasFilter);
     tbody.querySelectorAll('tr').forEach(tr => {
       if (!hasFilter) {
         tr.style.display = '';
