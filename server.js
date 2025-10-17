@@ -82,7 +82,18 @@ async function initCheckpoints() {
 // Ottieni pagina con optional filtri: severity, hostname (LIKE), agentip (LIKE)
 async function fetchPage(offset = 0, pageSize = PAGE_SIZE, activeOnly = null, severityFilter = null, hostnameFilter = null, ipFilter = null, timeFrom = null, timeTo = null ) {
   let q = `
-    SELECT id, node_id, active, eventname, severity, utctime, traptime, hostname, agentip, formatline
+    SELECT 
+      id, 
+      node_id, 
+      active, 
+      eventname, 
+      severity, 
+      utctime,
+      DATE_FORMAT(utctime, '%d-%m-%Y %H:%i:%s') AS utctime,
+      DATE_FORMAT(traptime, '%d-%m-%Y %H:%i:%s') AS traptime,
+      hostname, 
+      agentip, 
+      formatline
     FROM rcv_log
     WHERE 1=1
   `;
@@ -133,7 +144,18 @@ async function fetchPage(offset = 0, pageSize = PAGE_SIZE, activeOnly = null, se
 async function fetchChanges() {
   // Recupera tutte le righe nuove (id > lastMaxId)
   const newRowsQuery = `
-    SELECT id, node_id, active, eventname, severity, utctime, traptime, hostname, agentip, formatline, updated
+    SELECT 
+      id, 
+      node_id, 
+      active, 
+      eventname, 
+      severity, 
+      DATE_FORMAT(utctime, '%d-%m-%Y %H:%i:%s') AS utctime,
+      DATE_FORMAT(traptime, '%d-%m-%Y %H:%i:%s') AS traptime,
+      hostname, 
+      agentip, 
+      formatline, 
+      updated
     FROM rcv_log
     WHERE id > ?
     ORDER BY id ASC`;
@@ -141,7 +163,18 @@ async function fetchChanges() {
 
   // Recupera tutte le righe aggiornate (updated = 1)
   const updatedRowsQuery = `
-    SELECT id, node_id, active, eventname, severity, utctime, traptime, hostname, agentip, formatline, updated
+    SELECT 
+      id, 
+      node_id, 
+      active, 
+      eventname, 
+      severity, 
+      DATE_FORMAT(utctime, '%d-%m-%Y %H:%i:%s') AS utctime,
+      DATE_FORMAT(traptime, '%d-%m-%Y %H:%i:%s') AS traptime,
+      hostname, 
+      agentip, 
+      formatline, 
+      updated
     FROM rcv_log
     WHERE updated = 1
     ORDER BY id ASC`;

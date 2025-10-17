@@ -41,11 +41,11 @@
     th:nth-child(1), td:nth-child(1) { width: 5px; }
     th:nth-child(2), td:nth-child(2) { width: 80px; }
     th:nth-child(3), td:nth-child(3) { width: 140px; }
-    th:nth-child(4), td:nth-child(4) { width: 200px; }
+    th:nth-child(4), td:nth-child(4) { width: 300px; }
     th:nth-child(5), td:nth-child(5) { width: 120px; }
     th:nth-child(6), td:nth-child(6) { width: auto; }
 
-    th:nth-child(1), th:nth-child(3), th:nth-child(6) { color: transparent; }
+    th:nth-child(1) { color: transparent; }
 
     .sev-0 { color: #ffffff; }
     .sev-1 { color: #ff5555; }
@@ -136,7 +136,7 @@
   <table>
     <thead style="display: none;">
       <tr>
-        <th>Active</th><th>Severity</th><th>Traptime</th><th>Hostname</th><th>Agent IP</th><th>Formatline</th>
+        <th>A</th><th>Severity</th><th>Date/Time</th><th>Hostname</th><th>Tipologia</th><th>IP Address</th><th>Message</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -254,6 +254,7 @@
     const tdHost=document.createElement('td'); tdHost.textContent=r.hostname||''; tr.appendChild(tdHost);
     const tdIp=document.createElement('td'); tdIp.textContent=r.agentip||''; tr.appendChild(tdIp);
     const tdFormat=document.createElement('td'); tdFormat.textContent=r.formatline||''; tr.appendChild(tdFormat);
+
 
     tr.style.color = severityColors[r.severity] || '#fff';
     return tr;
@@ -780,13 +781,13 @@
   // Initialize Flatpickr datetimepickers
   flatpickr("#timeFrom", {
       enableTime: true,
-      dateFormat: "Y-m-d H:i:S",
+      dateFormat: "d-m-Y H:i:S",
       time_24hr: true
   });
 
   flatpickr("#timeTo", {
       enableTime: true,
-      dateFormat: "Y-m-d H:i:S",
+      dateFormat: "d-m-Y H:i:S",
       time_24hr: true
   });
 
