@@ -666,11 +666,11 @@
       hostInput.value = '';
       ipInput.value = '';
 
-      // Clear time inputs
-      const timeFromInput = document.getElementById('timeFrom');
-      const timeToInput = document.getElementById('timeTo');
-      if (timeFromInput) timeFromInput.value = '';
-      if (timeToInput) timeToInput.value = '';
+      // Reset Time filters
+      document.getElementById('timeFrom').value = '';
+      document.getElementById('timeTo').value = '';
+      timeFrom = null;
+      timeTo = null;
       
       // Reset active-only filter
       activeOnly = null;
@@ -781,13 +781,13 @@
   // Initialize Flatpickr datetimepickers
   flatpickr("#timeFrom", {
       enableTime: true,
-      dateFormat: "d-m-Y H:i:S",
+      dateFormat: "Y-m-d H:i:S",
       time_24hr: true
   });
 
   flatpickr("#timeTo", {
       enableTime: true,
-      dateFormat: "d-m-Y H:i:S",
+      dateFormat: "Y-m-d H:i:S",
       time_24hr: true
   });
 
