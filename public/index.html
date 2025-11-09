@@ -41,11 +41,11 @@
     th:nth-child(1), td:nth-child(1) { width: 5px; }
     th:nth-child(2), td:nth-child(2) { width: 80px; }
     th:nth-child(3), td:nth-child(3) { width: 140px; }
-    th:nth-child(4), td:nth-child(4) { width: 200px; }
+    th:nth-child(4), td:nth-child(4) { width: 300px; }
     th:nth-child(5), td:nth-child(5) { width: 120px; }
     th:nth-child(6), td:nth-child(6) { width: auto; }
 
-    th:nth-child(1), th:nth-child(3), th:nth-child(6) { color: transparent; }
+    th:nth-child(1) { color: transparent; }
 
     .sev-0 { color: #ffffff; }
     .sev-1 { color: #ff5555; }
@@ -136,7 +136,7 @@
   <table>
     <thead style="display: none;">
       <tr>
-        <th>Active</th><th>Severity</th><th>Traptime</th><th>Hostname</th><th>Agent IP</th><th>Formatline</th>
+        <th>A</th><th>Severity</th><th>Date/Time</th><th>Hostname</th><th>Tipologia</th><th>IP Address</th><th>Message</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -254,6 +254,7 @@
     const tdHost=document.createElement('td'); tdHost.textContent=r.hostname||''; tr.appendChild(tdHost);
     const tdIp=document.createElement('td'); tdIp.textContent=r.agentip||''; tr.appendChild(tdIp);
     const tdFormat=document.createElement('td'); tdFormat.textContent=r.formatline||''; tr.appendChild(tdFormat);
+
 
     tr.style.color = severityColors[r.severity] || '#fff';
     return tr;
@@ -429,7 +430,6 @@
             eventname: eventname  
           }));
         }
-
         // Aggiorna visivamente le righe nella tabella: active = 0
         selectedRows.forEach(r=>{
           r.children[0].querySelector('.dot').classList.add('hidden');
@@ -627,24 +627,24 @@
     let host = tr.children[3].textContent || '';
     let ip = tr.children[4].textContent || '';
     let active = !(tr.children[0].querySelector('.dot').classList.contains('hidden'));
-    // Se almeno un filtro è attivo, mostra solo se active=1 e tutti i filtri corrispondono
-    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim();
+    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim() || (activeOnly !== null);
     if (hasFilter) {
-      //if (!active) return false;
+      if (activeOnly === 1 && !active) return false;
       if (activeFilter !== null && sev !== activeFilter) return false;
       const hostVal = hostInput.value.trim().toLowerCase();
       if (hostVal && !host.toLowerCase().includes(hostVal)) return false;
       const ipVal = ipInput.value.trim().toLowerCase();
-      if (ipVal && !ip.toLowerCase().includes(ipVal)) return false;
+      if (ipVal && !ip.toLowerCase().includes(ipVal)) return false;  
       return true;
     }
     // Se nessun filtro attivo, mostra sempre
     return true;
   }
   function updateRowVisibility() {
-    console.debug('[DEBUG] updateRowVisibility called. activeFilter:', activeFilter, 'host:', hostInput.value, 'ip:', ipInput.value);
+    console.debug('[DEBUG] updateRowVisibility called. activeFilter:', activeFilter, 'host:', hostInput.value, 'ip:', ipInput.value, 'activeOnly:', activeOnly, 'timeFrom:', timeFrom, 'timeTo:', timeTo);
     // Se nessun filtro attivo, mostra tutto
-    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim();
+    const hasFilter = (activeFilter !== null) || hostInput.value.trim() || ipInput.value.trim() || (activeOnly !== null);
+    console.debug('[DEBUG] hasFilter:', hasFilter);
     tbody.querySelectorAll('tr').forEach(tr => {
       if (!hasFilter) {
         tr.style.display = '';
@@ -666,11 +666,11 @@
       hostInput.value = '';
       ipInput.value = '';
 
-      // Clear time inputs
-      const timeFromInput = document.getElementById('timeFrom');
-      const timeToInput = document.getElementById('timeTo');
-      if (timeFromInput) timeFromInput.value = '';
-      if (timeToInput) timeToInput.value = '';
+      // Reset Time filters
+      document.getElementById('timeFrom').value = '';
+      document.getElementById('timeTo').value = '';
+      timeFrom = null;
+      timeTo = null;
       
       // Reset active-only filter
       activeOnly = null;
