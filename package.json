@@ -4,7 +4,8 @@
   "description": "Server WebSocket + MySQL per rcv_log, pagination e push updates",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "netstart": "node netstart.js"
   },
   "dependencies": {
     "dotenv": "^16.1.4",
