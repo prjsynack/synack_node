@@ -129,16 +129,16 @@ async function fetchPage(offset = 0, pageSize = PAGE_SIZE, activeOnly = null, se
   }
 
   // Filtro intervallo temporale traptime
-  console.debug(`[DEBUG] Filtro timeFrom: ${timeFrom}, timeTo: ${timeTo}`);
   if (timeFrom !== null && timeTo !== null) {
     q += " AND traptime BETWEEN ? AND ?";
     params.push(timeFrom, timeTo);
+    console.debug(`[DEBUG] Filtro traptime attivo: from ${timeFrom} to ${timeTo}`);
   }
 
 
   q += ' ORDER BY id DESC LIMIT ? OFFSET ?';
   params.push(pageSize, offset);
-  console.debug(`[DEBUG] fetchPage query: ${q} con params:`, params); 
+  // console.debug(`[DEBUG] fetchPage query: ${q} con params:`, params); 
   const [rows] = await pool.query(q, params);
   return rows;
 }
