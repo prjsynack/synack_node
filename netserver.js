@@ -50,27 +50,7 @@ app.get('/miboid', async (req, res) => {
     res.status(500).json({ error: 'Errore nel recupero dei dati' });
   }
 });
-// API per ottenere i dati della tabella nodes (escludendo id)
-app.get('/api/nodes', async (req, res) => {
-  try {
-    const [rows] = await pool.query(`
-      SELECT 
-        node_name, 
-        target, 
-        site, 
-        node_type, 
-        node_model, 
-        poll_interval, 
-        poll_retry, 
-        poll_timeout
-      FROM nodes
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error('Errore /api/nodes:', err);
-    res.status(500).json({ error: 'Errore nel recupero dei dati' });
-  }
-});
+
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
@@ -328,6 +308,37 @@ wss.on('connection', async function connection(ws, req) {
   ws.on('close', () => {
     console.log('Client disconnesso');
   });
+});
+
+// Webhook per NetBox
+app.use(express.json());
+app.post('/webhook/netbox', async (req, res) => {
+    const body = req.body;
+
+    if (body.event === "deleted" && body.data?.id) {
+        const nodeId = body.data.id;
+        console.log(`[WEBHOOK] Nodo eliminato in NetBox: ID=${nodeId}`);
+        try {
+            const sql = `
+                UPDATE rcv_log
+                SET active = 0,
+                    updated = 1
+                WHERE node_id = ?
+            `;
+
+            const [result] = await pool.query(sql, [nodeId]);
+
+            console.log(`Updated ${result.affectedRows} rows for node_id=${nodeId}`);
+        } catch (err) {
+            console.error("MySQL error during update:", err);
+        }
+    }
+
+    return res.sendStatus(200);
+});
+
+app.listen(8006, () => {
+    console.log('Webhook server in ascolto sulla porta 3000');
 });
 
 (async () => {
